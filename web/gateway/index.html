@@ -13,46 +13,26 @@
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{
-  margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
-  background:var(--bg); color:var(--fg); overflow:hidden;
-}
+body{margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background:var(--bg); color:var(--fg); overflow:hidden}
 .app{display:grid; grid-template-columns:220px 1fr; height:100vh}
-.side{
-  background:var(--panel); border-right:1px solid var(--border);
-  display:flex; flex-direction:column; padding:16px 12px; gap:4px;
-}
+.side{background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:16px 12px; gap:4px}
 .brand{display:flex; align-items:center; gap:10px; padding:8px 10px 18px; font-weight:700; font-size:15px}
-.brand .logo{
-  width:28px; height:28px; border-radius:8px;
-  background:linear-gradient(135deg,var(--accent),#8b5cf6);
-  display:grid; place-items:center; font-size:15px;
-}
+.brand .logo{width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#8b5cf6); display:grid; place-items:center; font-size:15px}
 .nav{display:flex; flex-direction:column; gap:2px}
-.nav a{
-  display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px;
-  color:var(--muted); text-decoration:none; font-size:13.5px; cursor:pointer;
-  transition:background .15s,color .15s;
-}
+.nav a{display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; color:var(--muted); text-decoration:none; font-size:13.5px; cursor:pointer; transition:background .15s,color .15s}
 .nav a:hover{background:var(--panel2); color:var(--fg)}
 .nav a.on{background:var(--accent); color:#fff}
 .nav a .ic{width:16px; text-align:center; opacity:.9}
+.nav a .cnt{margin-left:auto; font-size:11px; background:var(--panel2); padding:1px 7px; border-radius:10px; color:var(--muted)}
+.nav a.on .cnt{background:rgba(255,255,255,.2); color:#fff}
 .side .foot{margin-top:auto; padding:10px; font-size:11px; color:var(--muted); border-top:1px solid var(--border)}
 .main{display:flex; flex-direction:column; overflow:hidden}
-.top{
-  display:flex; align-items:center; gap:12px; padding:12px 20px;
-  background:var(--panel); border-bottom:1px solid var(--border);
-}
+.top{display:flex; align-items:center; gap:12px; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border)}
 .top h1{font-size:15px; margin:0; font-weight:600}
 .top .sp{flex:1}
-.host{
-  display:flex; align-items:center; gap:6px; background:var(--panel2);
-  border:1px solid var(--border); border-radius:8px; padding:4px 8px;
-}
-.host input{
-  background:transparent; border:0; color:var(--fg); font-size:13px;
-  width:150px; outline:0; font-family:ui-monospace,monospace;
-}
+.host{display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:4px 8px}
+.host input{background:transparent; border:0; color:var(--fg); font-size:13px; width:150px; outline:0; font-family:ui-monospace,monospace}
 .status{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted)}
 .dot{width:8px; height:8px; border-radius:50%; background:var(--muted); transition:background .3s}
 .dot.on{background:var(--ok); box-shadow:0 0 8px var(--ok)}
@@ -64,60 +44,97 @@ body{
 .page.on{display:block}
 @keyframes fade{from{opacity:0; transform:translateY(6px)}}
 .grid{display:grid; gap:16px; grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
-.card{
-  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
-  box-shadow:var(--shadow); overflow:hidden;
-}
-.card .hd{
-  display:flex; align-items:center; gap:8px; padding:12px 16px;
-  border-bottom:1px solid var(--border); font-weight:600; font-size:13px;
-}
+.card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden}
+.card .hd{display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--border); font-weight:600; font-size:13px}
 .card .hd .ic{color:var(--accent); font-size:15px}
+.card .hd .sub{margin-left:auto; font-size:11px; color:var(--muted); font-weight:400}
 .card .bd{padding:16px}
 .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px}
 .row:last-child{margin-bottom:0}
 label{font-size:12px; color:var(--muted); min-width:32px}
-input[type=text],input[type=number],input:not([type]){
-  background:var(--bg); color:var(--fg); border:1px solid var(--border);
-  border-radius:8px; padding:7px 10px; font-size:13px; width:90px; outline:0;
-  transition:border-color .15s,box-shadow .15s;
-}
-input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+input,select{background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:7px 10px; font-size:13px; outline:0; transition:border-color .15s,box-shadow .15s}
+input{width:90px}
+input:focus,select:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(59,130,246,.15)}
 input[type=file]{font-size:12px; color:var(--muted); width:auto}
-.btn{
-  display:inline-flex; align-items:center; gap:6px; background:var(--accent); color:#fff;
-  border:0; border-radius:8px; padding:7px 14px; font-size:13px; font-weight:500;
-  cursor:pointer; transition:background .15s,transform .08s;
-}
+.btn{display:inline-flex; align-items:center; gap:6px; background:var(--accent); color:#fff; border:0; border-radius:8px; padding:7px 14px; font-size:13px; font-weight:500; cursor:pointer; transition:background .15s,transform .08s}
 .btn:hover{background:var(--accent-h)}
 .btn:active{transform:scale(.97)}
 .btn.ghost{background:var(--panel2); color:var(--fg); border:1px solid var(--border)}
 .btn.ghost:hover{background:var(--border)}
+.btn.sm{padding:4px 10px; font-size:12px}
 .btn.danger{background:var(--err)}
-.out{
-  background:#070b14; border:1px solid var(--border); border-radius:8px;
-  padding:10px 12px; margin-top:12px; font:12px/1.5 ui-monospace,'Cascadia Code',Consolas,monospace;
-  color:#7dd3fc; white-space:pre-wrap; word-break:break-word; min-height:22px;
-  max-height:200px; overflow:auto;
-}
+.btn.on{background:var(--ok)}
+.out{background:#070b14; border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-top:12px; font:12px/1.5 ui-monospace,'Cascadia Code',Consolas,monospace; color:#7dd3fc; white-space:pre-wrap; word-break:break-word; min-height:22px; max-height:200px; overflow:auto}
 .out.err{color:#fca5a5}
+/* 引脚表格 */
+table{width:100%; border-collapse:collapse; font-size:13px}
+th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border)}
+th{color:var(--muted); font-weight:500; font-size:12px}
+td select{width:110px}
+td input{width:64px}
+tr:last-child td{border-bottom:0}
+tr.used td{background:rgba(59,130,246,.05)}
+.pinname{font-family:ui-monospace,monospace; color:var(--fg); font-weight:600}
+td.caps{font-size:11px; color:var(--muted); font-family:ui-monospace,monospace; max-width:140px}
+/* GPIO 控制项 */
+.ctrl{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border)}
+.ctrl:last-child{border-bottom:0}
+.ctrl .name{font-family:ui-monospace,monospace; font-weight:600; min-width:44px}
+.ctrl .val{margin-left:auto; font-family:ui-monospace,monospace; color:#7dd3fc}
+/* 概览：键值对 */
+.kv{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px}
+.kv:last-of-type{border-bottom:0}
+.kv span{color:var(--muted)}
+.kv b{font-weight:600; font-family:ui-monospace,monospace}
+/* 概览：统计块 */
+.stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
+.stat{background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:14px 8px; text-align:center}
+.stat .sic{font-size:18px; color:var(--accent); margin-bottom:4px}
+.stat .sv{font-size:22px; font-weight:700; font-family:ui-monospace,monospace}
+.stat .sn{font-size:11px; color:var(--muted); margin-top:2px}
+/* 引脚复用：Tab 切换 */
+.tabs{display:flex; gap:4px; padding:10px 16px 0; border-bottom:1px solid var(--border)}
+.tabs a{padding:8px 14px; font-size:13px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; transition:color .15s,border-color .15s}
+.tabs a:hover{color:var(--fg)}
+.tabs a.on{color:var(--accent); border-bottom-color:var(--accent)}
+/* 引脚复用：按外设手风琴（Accordion 卡片，借鉴 AWS 控制台 / Bootstrap Accordion） */
+.pmacc{padding:12px 16px 16px; display:flex; flex-direction:column; gap:8px}
+.acc{background:var(--panel2); border:1px solid var(--border); border-radius:10px; overflow:hidden; transition:border-color .15s}
+.acc.open{border-color:var(--accent)}
+.acc-hd{display:flex; align-items:center; gap:12px; padding:12px 16px; cursor:pointer; user-select:none; transition:background .12s; min-height:48px}
+.acc-hd:hover{background:rgba(255,255,255,.03)}
+.acc-hd .caret{color:var(--muted); font-size:11px; transition:transform .2s; width:10px; flex-shrink:0}
+.acc.open .caret{transform:rotate(90deg)}
+.acc-hd .ic{color:var(--accent); font-size:15px; width:18px; text-align:center; flex-shrink:0}
+.acc-hd .nm{font-family:ui-monospace,monospace; font-weight:600; font-size:14px; flex-shrink:0}
+.acc-hd .cat{font-size:11px; color:var(--muted); background:var(--bg); padding:1px 8px; border-radius:10px; flex-shrink:0}
+.acc-hd .pins{margin-left:auto; display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; align-items:center}
+.acc-hd .cnt{font-size:11px; color:var(--muted); min-width:52px; text-align:right; flex-shrink:0}
+.acc-bd{border-top:1px solid var(--border); padding:4px 16px 6px}
+.acc-row{display:flex; align-items:center; gap:14px; padding:11px 0; border-bottom:1px solid var(--border)}
+.acc-row:first-child{padding-top:8px}
+.acc-row:last-child{border-bottom:0; padding-bottom:8px}
+.acc-row .sig{min-width:110px; display:flex; flex-direction:column; gap:1px}
+.acc-row .sig b{font-size:13px; font-weight:600}
+.acc-row .sig span{font-family:ui-monospace,monospace; font-size:10.5px; color:var(--muted)}
+.acc-row .used{flex:1; display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+.acc-row .add{white-space:nowrap; display:flex; gap:6px; align-items:center}
+.acc-row .add select{width:auto; font-size:12px; padding:5px 8px}
+.pmempty{color:var(--muted); text-align:center; padding:40px 20px; font-size:13px}
+.chip{display:inline-flex; align-items:center; gap:4px; background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:3px 8px; font-size:12px; font-family:ui-monospace,monospace}
+.chip a{color:var(--muted); cursor:pointer; font-size:14px; line-height:1; text-decoration:none}
+.chip a:hover{color:var(--err)}
+.muted{color:var(--muted); font-size:12px}
+/* Toast */
 #toasts{position:fixed; top:16px; right:16px; display:flex; flex-direction:column; gap:8px; z-index:100}
-.toast{
-  background:var(--panel); border:1px solid var(--border); border-left:3px solid var(--accent);
-  border-radius:8px; padding:10px 14px; font-size:13px; box-shadow:var(--shadow);
-  animation:slide .25s; max-width:320px;
-}
-.toast.err{border-left-color:var(--err)}
-.toast.ok{border-left-color:var(--ok)}
+.toast{background:var(--panel); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:8px; padding:10px 14px; font-size:13px; box-shadow:var(--shadow); animation:slide .25s; max-width:320px}
+.toast.err{border-left-color:var(--err)} .toast.ok{border-left-color:var(--ok)}
 @keyframes slide{from{opacity:0; transform:translateX(20px)}}
+.empty{color:var(--muted); font-size:13px; padding:16px 0; text-align:center}
 ::-webkit-scrollbar{width:10px; height:10px}
 ::-webkit-scrollbar-thumb{background:var(--border); border-radius:5px}
 ::-webkit-scrollbar-thumb:hover{background:#2d3a52}
-@media(max-width:720px){
-  .app{grid-template-columns:1fr}
-  .side{display:none}
-  .host input{width:110px}
-}
+@media(max-width:720px){.app{grid-template-columns:1fr}.side{display:none}.host input{width:110px}}
 </style>
 </head>
 <body>
@@ -131,10 +148,7 @@ input[type=file]{font-size:12px; color:var(--muted); width:auto}
     <div class=top>
       <h1 id=title>控制台</h1>
       <span class=sp></span>
-      <div class=host>
-        <span style="font-size:12px;color:var(--muted)">设备</span>
-        <input id=host value="http://192.168.7.1" spellcheck=false>
-      </div>
+      <div class=host><span style="font-size:12px;color:var(--muted)">设备</span><input id=host value="http://192.168.7.1" spellcheck=false></div>
       <button class="btn ghost" onclick=connect()>连接</button>
       <div class=status><span class="dot" id=dot></span><span id=statustxt>未连接</span></div>
     </div>
@@ -146,7 +160,6 @@ input[type=file]{font-size:12px; color:var(--muted); width:auto}
 <script>
 const $=id=>document.getElementById(id);
 const V=id=>$(id).value;
-
 const H=()=>{
   const q=new URLSearchParams(location.search).get('host');
   if(q){localStorage.setItem('gw_host',q); return q.replace(/\/$/,'')}
@@ -157,113 +170,541 @@ function setStatus(s){
   $('statustxt').textContent=s==='on'?'已连接':s==='off'?'连接失败':'连接中…';
 }
 function toast(msg,type){
-  const t=document.createElement('div');
-  t.className='toast '+(type||'');
-  t.textContent=msg;
+  const t=document.createElement('div'); t.className='toast '+(type||''); t.textContent=msg;
   $('toasts').appendChild(t);
   setTimeout(()=>{t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300)},3000);
 }
 async function api(path,method,body){
   setStatus('wait');
   const r=await fetch(H()+path,method?{method,body}:undefined);
-  const t=await r.text();
-  setStatus('on');
-  return t;
+  const t=await r.text(); setStatus('on'); return t;
 }
 async function call(outId,path,method){
-  try{
-    const t=await api(path,method);
-    $(outId).textContent=t; $(outId).classList.remove('err');
-  }catch(e){
-    $(outId).textContent='错误: '+e.message; $(outId).classList.add('err');
-    setStatus('off'); toast('请求失败: '+e.message,'err');
-  }
+  try{ const t=await api(path,method); if(outId){$(outId).textContent=t; $(outId).classList.remove('err')} return t; }
+  catch(e){ if(outId){$(outId).textContent='错误: '+e.message; $(outId).classList.add('err')} setStatus('off'); toast('请求失败: '+e.message,'err'); }
 }
-function connect(){
-  localStorage.setItem('gw_host',V('host').replace(/\/$/,''));
-  call('out-info','/api/info').then(()=>toast('已连接设备','ok'));
-}
+function connect(){ localStorage.setItem('gw_host',V('host').replace(/\/$/,'')); refreshPins().then(()=>toast('已连接设备','ok')); }
 
-/* 页面：[组名, 图标, [卡片...]]
-   卡片: {t:标题, ic:图标, in:[[标签,id,默认值]], b:[[输出区,URL,标签,POST?]], out:输出区, extra} */
-const PAGES=[
- {n:'概览', ic:'▦', cards:[
-   {t:'系统信息', ic:'ℹ', out:'out-info', b:[['out-info','/api/info','刷新']]},
-   {t:'引脚复用', ic:'⚙', out:'out-pins', b:[['out-pins','/api/pins','列出']]},
- ]},
- {n:'GPIO / ADC', ic:'⚙', cards:[
-   {t:'GPIO 控制', ic:'⚙', in:[['引脚','gp','0']], out:'out-gpio',
-    b:[['out-gpio','/api/gpio?pin=$gp','读取'],['out-gpio','/api/gpio?pin=$gp&val=1','置 1',1],['out-gpio','/api/gpio?pin=$gp&val=0','置 0',1]]},
-   {t:'ADC 采集', ic:'◈', in:[['通道','ac','0']], out:'out-adc',
-    b:[['out-adc','/api/adc?ch=$ac','读取']]},
- ]},
- {n:'网络', ic:'⇄', cards:[
-   {t:'路由表', ic:'⇄', in:[['目标','rd','0'],['掩码','rm','0'],['通道','rc','0']], out:'out-route',
-    b:[['out-route','/api/route/add?dest=$rd&mask=$rm&ch=$rc','添加',1],['out-route','/api/route/del?dest=$rd&mask=$rm','删除',1],['out-route','/api/routes','列出']]},
-   {t:'DHCP 服务器', ic:'⊞', in:[['IP','di','192.168.7.2'],['掩码','dm','255.255.255.0']], out:'out-dhcp',
-    b:[['out-dhcp','/api/dhcp?ip=$di&mask=$dm','设置',1],['out-dhcp','/api/dhcp','状态']]},
- ]},
- {n:'蓝牙', ic:'◉', cards:[
-   {t:'BLE 状态', ic:'◉', out:'out-ble', b:[['out-ble','/api/ble','查询']]},
- ]},
- {n:'SWIO 烧录', ic:'⬇', cards:[
-   {t:'SWIO 固件烧录', ic:'⬇', in:[['引脚','sp','0']], out:'out-swio',
-    b:[['out-swio','/api/swio?pin=$sp','设引脚',1],['out-swio','/api/swio/handshake','握手'],['out-swio','/api/swio','进度']],
-    extra:'swio'},
- ]},
- {n:'配置', ic:'⚒', cards:[
-   {t:'配置管理', ic:'⚒', out:'out-cfg',
-    b:[['out-cfg','/api/save','保存',1],['out-cfg','/api/load','加载',1]]},
- ]},
+/* ---------- 引脚配置模型 ---------- */
+/* 功能列表（含外设实例：UART0-3、SPI0、I2C） */
+const FUNCS=['NONE','GPIO_IN','GPIO_OUT','SWIO',
+  'UART0_TX','UART0_RX','UART1_TX','UART1_RX','UART2_TX','UART2_RX','UART3_TX','UART3_RX',
+  'SPI0_MOSI','SPI0_MISO','SPI0_SCK','SPI0_SCS','I2C_SCL','I2C_SDA','PWM','ADC'];
+/* 功能中文名（用于显示） */
+const FUNC_CN={NONE:'未使用',GPIO_IN:'GPIO 输入',GPIO_OUT:'GPIO 输出',SWIO:'SWIO 烧录',
+  UART0_TX:'UART0 TX',UART0_RX:'UART0 RX',UART1_TX:'UART1 TX',UART1_RX:'UART1 RX',
+  UART2_TX:'UART2 TX',UART2_RX:'UART2 RX',UART3_TX:'UART3 TX',UART3_RX:'UART3 RX',
+  SPI0_MOSI:'SPI0 MOSI',SPI0_MISO:'SPI0 MISO',SPI0_SCK:'SPI0 SCK',SPI0_SCS:'SPI0 SCS',
+  I2C_SCL:'I2C SCL',I2C_SDA:'I2C SDA',PWM:'PWM',ADC:'ADC'};
+/* 外设树：大类 → 实例 → 信号
+ * 用于「按外设」视图：先选大类（GPIO/UART/SPI...），展开后选实例（UART0/UART1...），
+ * 再展开显示该实例的各信号（TX/RX/MOSI...）
+ * 结构：[{cat:大类中文名, ic:图标, insts:[{name:实例名, sigs:[[功能, 信号短名]...]}]}] */
+const TREE=[
+  {cat:'GPIO', ic:'⚙', insts:[{name:'GPIO', sigs:[['GPIO_IN','输入'],['GPIO_OUT','输出']]}]},
+  {cat:'UART', ic:'⇄', insts:[
+    {name:'UART0', sigs:[['UART0_TX','TX'],['UART0_RX','RX']]},
+    {name:'UART1', sigs:[['UART1_TX','TX'],['UART1_RX','RX']]},
+    {name:'UART2', sigs:[['UART2_TX','TX'],['UART2_RX','RX']]},
+    {name:'UART3', sigs:[['UART3_TX','TX'],['UART3_RX','RX']]},
+  ]},
+  {cat:'SPI', ic:'▤', insts:[
+    {name:'SPI0', sigs:[['SPI0_MOSI','MOSI'],['SPI0_MISO','MISO'],['SPI0_SCK','SCK'],['SPI0_SCS','SCS']]},
+  ]},
+  {cat:'I2C', ic:'◇', insts:[
+    {name:'I2C', sigs:[['I2C_SCL','SCL'],['I2C_SDA','SDA']]},
+  ]},
+  {cat:'PWM', ic:'▥', insts:[{name:'PWM', sigs:[['PWM','PWM']]}]},
+  {cat:'ADC', ic:'◈', insts:[{name:'ADC', sigs:[['ADC','ADC']]}]},
+  {cat:'SWIO', ic:'⬇', insts:[{name:'SWIO', sigs:[['SWIO','SWIO']]}]},
 ];
+let PINS=[];   // [{name,func,p1,p2,arg}]
+const byFunc=f=>PINS.filter(p=>p.func===f);
+const funcCN=f=>FUNC_CN[f]||f;
 
-function buildNav(){
-  $('nav').innerHTML=PAGES.map((p,i)=>
-    `<a onclick="showPage(${i})" id="nav-${i}" class="${i===0?'on':''}"><span class=ic>${p.ic}</span>${p.n}</a>`
-  ).join('');
+/* 引脚能力表（据 CH592/CH591 数据手册 V1.9 引脚复用表）
+ * 每项：引脚名 → 支持的外设实例集合（GPIO_IN/OUT/SWIO 所有引脚都支持）
+ * 命名：UARTn_TX/RX（n=0..3）、SPI0_MOSI/MISO/SCK/SCS、I2C_SCL/SDA
+ * 无下划线=默认映射，有下划线=重映射（如 TXD0_ 是 UART0 的 TX 重映射到 PA14） */
+const PIN_CAPS={
+  PA4:['UART3_RX','ADC'],                    // RXD3, AIN0
+  PA5:['UART3_TX','ADC'],                    // TXD3, AIN1
+  PA6:['PWM','UART2_RX','ADC'],              // PWM4_, RXD2_, AIN10
+  PA7:['UART2_TX','PWM','ADC'],              // TXD2_, PWM5_, AIN11
+  PA8:['UART1_RX','ADC'],                    // RXD1, AIN12
+  PA9:['UART1_TX','PWM','ADC'],              // TXD1, TMR0, AIN13
+  PA10:['PWM'],                              // TMR1 (X32KI)
+  PA11:['PWM'],                              // TMR2 (X32KO)
+  PA12:['SPI0_SCS','PWM','ADC'],             // SCS, PWM4, AIN2
+  PA13:['SPI0_SCK','PWM','ADC'],             // SCK0, PWM5, AIN3
+  PA14:['SPI0_MOSI','UART0_TX','ADC'],       // MOSI, TXD0_, AIN4
+  PA15:['SPI0_MISO','UART0_RX','ADC'],       // MISO, RXD0_, AIN5
+  PB0:['PWM','ADC'],                         // PWM6, AIN8
+  PB4:['UART0_RX','PWM'],                    // RXD0, PWM7
+  PB6:['PWM','ADC'],                         // PWM8, AIN9
+  PB7:['UART0_TX','PWM'],                    // TXD0, PWM9
+  PB10:['PWM'],                              // TMR1_ (UD-)
+  PB11:['PWM'],                              // TMR2_ (UD+)
+  PB12:['SPI0_SCS','UART1_RX'],              // SCS_, RXD1_
+  PB13:['SPI0_SCK','UART1_TX'],              // SCK0_, TXD1_
+  PB14:['SPI0_MOSI','I2C_SDA','PWM'],        // MOSI_, SDA, PWM10
+  PB15:['SPI0_MISO','I2C_SCL'],              // MISO_, SCL
+  PB22:['PWM','UART2_RX'],                   // TMR3, RXD2
+  PB23:['UART2_TX','PWM'],                   // TXD2, PWM11
+};
+/* 某引脚是否支持某功能（GPIO_IN/OUT/SWIO 所有引脚均可） */
+function pinSupports(name,func){
+  if(func==='NONE'||func==='GPIO_IN'||func==='GPIO_OUT'||func==='SWIO') return true;
+  const caps=PIN_CAPS[name]||[];
+  return caps.includes(func);
 }
-function cardHTML(c){
-  let h=`<div class=card><div class=hd><span class=ic>${c.ic||'•'}</span>${c.t}</div><div class=bd>`;
-  if(c.in) h+=`<div class=row>${c.in.map(([l,id,v])=>`<label>${l}</label><input id=${id} value="${v}">`).join('')}</div>`;
-  if(c.b) h+=`<div class=row>${c.b.map(([o,u,l,p])=>{
-    const q=u.replace(/\$(\w+)/g,"'+V('$1')+'");
-    return `<button class="btn${p?'':' ghost'}" onclick="call('${o}','${q}'${p?",'POST'":''})">${l}</button>`;
-  }).join('')}</div>`;
-  if(c.extra==='swio') h+=`<div class=row><label>地址</label><input id=sa value="0x08000000"><input type=file id=sf accept=.bin><button class="btn danger" onclick=flash()>烧录</button></div>`;
-  h+=`<div class=out id=${c.out}>—</div></div></div>`;
-  return h;
+/* 支持某功能的引脚列表 */
+function pinsForFunc(func){
+  return PINS.map((p,i)=>({p,i})).filter(x=>pinSupports(x.p.name,func));
+}
+
+async function refreshPins(){
+  try{
+    const t=await api('/api/pins');
+    PINS=t.trim().split('\n').filter(Boolean).map(l=>{
+      const a=l.trim().split(/\s+/);
+      return {name:a[0],func:a[1],p1:+(a[2]||0),p2:+(a[3]||0),arg:+(a[4]||0)};
+    });
+    buildNav(); buildPages();
+    return true;
+  }catch(e){ toast('读取引脚失败: '+e.message,'err'); return false; }
+}
+
+/* ---------- 页面 ---------- */
+function pageList(){
+  return [
+    {n:'系统状况', ic:'▤', render:renderOverview},
+    {n:'引脚复用', ic:'⚒', render:renderPinmux, cnt:PINS.length},
+    {n:'GPIO', ic:'⚙', render:renderGPIO, cnt:byFunc('GPIO_IN').length+byFunc('GPIO_OUT').length},
+    {n:'ADC', ic:'◈', render:renderADC, cnt:byFunc('ADC').length},
+    {n:'PWM', ic:'▤', render:renderPWM, cnt:byFunc('PWM').length},
+    {n:'网络', ic:'⇄', render:renderNet},
+    {n:'蓝牙', ic:'◉', render:renderBLE},
+    {n:'SWIO 烧录', ic:'⬇', render:renderSWIO, cnt:byFunc('SWIO').length},
+    {n:'配置', ic:'⚙', render:renderCfg},
+  ];
+}
+let PAGES=[];
+let CUR_PAGE=0;   // 当前页索引（重渲染后保持）
+function buildNav(){
+  PAGES=pageList();
+  $('nav').innerHTML=PAGES.map((p,i)=>
+    `<a onclick="showPage(${i})" id="nav-${i}" class="${i===CUR_PAGE?'on':''}"><span class=ic>${p.ic}</span>${p.n}${p.cnt!=null?`<span class=cnt>${p.cnt}</span>`:''}</a>`).join('');
 }
 function buildPages(){
-  $('content').innerHTML=PAGES.map((p,i)=>`
-    <div class="page ${i===0?'on':''}" id="page-${i}">
-      <div class=grid>${p.cards.map(c=>cardHTML(c)).join('')}</div>
-    </div>`).join('');
+  $('content').innerHTML=PAGES.map((p,i)=>`<div class="page ${i===CUR_PAGE?'on':''}" id="page-${i}">${p.render()}</div>`).join('');
+  $('title').textContent=PAGES[CUR_PAGE].n;
+  if(typeof afterRender==='function') afterRender();
 }
 function showPage(i){
+  CUR_PAGE=i;
   document.querySelectorAll('.page').forEach((e,j)=>e.classList.toggle('on',j===i));
   document.querySelectorAll('.nav a').forEach((e,j)=>e.classList.toggle('on',j===i));
   $('title').textContent=PAGES[i].n;
 }
+
+/* ---------- 渲染：系统状况（首页） ---------- */
+function renderOverview(){
+  const used=PINS.filter(p=>p.func!=='NONE');
+  const stats=[
+    ['GPIO', byFunc('GPIO_IN').length+byFunc('GPIO_OUT').length, '⚙'],
+    ['ADC', byFunc('ADC').length, '◈'],
+    ['PWM', byFunc('PWM').length, '▤'],
+    ['SWIO', byFunc('SWIO').length, '⬇'],
+  ];
+  return `<div class=grid>
+    <div class=card><div class=hd><span class=ic>ℹ</span>设备信息</div><div class=bd>
+      <div class=kv><span>芯片</span><b id=ov-chip>—</b></div>
+      <div class=kv><span>主频</span><b id=ov-clk>—</b></div>
+      <div class=kv><span>固件</span><b>CH59x Gateway</b></div>
+      <div class=kv><span>芯片 ID</span><b id=ov-chipid>—</b></div>
+      <div class=kv><span>唯一 ID</span><b id=ov-uid style="font-size:11px;letter-spacing:.5px">—</b></div>
+      <div class=row style="margin-top:12px"><button class="btn ghost" onclick=refreshOverview()>刷新</button></div>
+    </div></div>
+
+    <div class=card><div class=hd><span class=ic>⇄</span>网络状态</div><div class=bd>
+      <div class=kv><span>IP 地址</span><b id=ov-ip>—</b></div>
+      <div class=kv><span>RNDIS</span><b id=ov-rndis>—</b></div>
+      <div class=kv><span>DHCP 客户端</span><b id=ov-cli>—</b></div>
+      <div class=row style="margin-top:12px"><button class="btn ghost" onclick=refreshNet()>刷新</button></div>
+    </div></div>
+
+    <div class=card><div class=hd><span class=ic>◉</span>蓝牙状态</div><div class=bd>
+      <div class=kv><span>角色</span><b id=ov-role>—</b></div>
+      <div class=kv><span>状态</span><b id=ov-state>—</b></div>
+      <div class=kv><span>连接</span><b id=ov-conn>—</b></div>
+      <div class=row style="margin-top:12px"><button class="btn ghost" onclick=refreshBLE()>刷新</button></div>
+    </div></div>
+
+    <div class=card><div class=hd><span class=ic>⚒</span>引脚配置概览<span class=sub>${used.length}/${PINS.length} 已用</span></div><div class=bd>
+      <div class=stats>${stats.map(([n,v,ic])=>`<div class=stat><div class=sic>${ic}</div><div class=sv>${v}</div><div class=sn>${n}</div></div>`).join('')}</div>
+      <div class=row style="margin-top:12px"><button class="btn ghost" onclick="showPage(1)">去配置 →</button></div>
+    </div></div>
+  </div>`;
+}
+async function refreshOverview(){
+  const t=await call(null,'/api/info');
+  if(t){
+    const chip=t.match(/chip=(\S+)/), clk=t.match(/clk=(\d+)/);
+    const cid=t.match(/chipid=(\d+)/), uid=t.match(/uid=([0-9A-Fa-f]+)/);
+    if(chip) $('ov-chip').textContent=chip[1];
+    if(clk) $('ov-clk').textContent=(+clk[1]/1e6).toFixed(0)+' MHz';
+    if(cid) $('ov-chipid').textContent='0x'+(+cid[1]).toString(16).toUpperCase().padStart(2,'0');
+    if(uid){
+      // 8 字节唯一 ID，格式化为 XX:XX:XX:XX:XX:XX:XX:XX
+      const s=uid[1].toUpperCase();
+      $('ov-uid').textContent=s.match(/.{2}/g).join(':');
+    }
+  }
+}
+async function refreshNet(){
+  const t=await call(null,'/api/info');
+  if(t){
+    // 匹配 IP=x.x.x.x（避免误匹配 chip=CH59x）
+    const ip=t.match(/(?:^|\n)(?:IP|ip)=(\d+\.\d+\.\d+\.\d+)/);
+    const rd=t.match(/rndis=(\d)/);
+    if(ip) $('ov-ip').textContent=ip[1];
+    if(rd) $('ov-rndis').textContent=rd[1]==='1'?'就绪':'未就绪';
+  }
+  const d=await call(null,'/api/dhcp');
+  if(d){ const c=d.match(/clients=(\d+)/); if(c) $('ov-cli').textContent=c[1]; }
+}
+async function refreshBLE(){
+  const t=await call(null,'/api/ble');
+  if(t){
+    const r=t.match(/role=(\S+)/), s=t.match(/state=(\S+)/), c=t.match(/conn=(\d)/);
+    if(r) $('ov-role').textContent=r[1];
+    if(s) $('ov-state').textContent=s[1];
+    if(c) $('ov-conn').textContent=c[1]==='1'?'已连接':'未连接';
+  }
+}
+function afterRender(){
+  if($('ov-chip')) { refreshOverview(); refreshNet(); refreshBLE(); }
+}
+
+/* ---------- 渲染：引脚复用（双视图） ---------- */
+let PM_TAB='pin';   // 'pin' | 'func'
+
+function renderPinmux(){
+  const tab=`<div class=tabs>
+    <a class="${PM_TAB==='pin'?'on':''}" onclick="pmTab('pin')">按引脚</a>
+    <a class="${PM_TAB==='func'?'on':''}" onclick="pmTab('func')">按外设</a>
+  </div>`;
+  const body=PM_TAB==='pin'?pmByPin():pmByFunc();
+  return `<div class=card><div class=hd><span class=ic>⚒</span>引脚复用配置<span class=sub>共 ${PINS.length} 个引脚</span></div>
+    <div class=bd style="padding:0">${tab}${body}</div></div>
+    <div class=row style="margin-top:12px">
+      <button class="btn ghost" onclick="refreshPins()">重新读取</button>
+      <button class="btn" onclick="call(null,'/api/save','POST').then(()=>toast('已保存','ok'))">保存全部</button>
+      <button class="btn ghost" onclick="call(null,'/api/load','POST').then(refreshPins)">加载配置</button>
+    </div>`;
+}
+function pmTab(t){
+  PM_TAB=t;
+  // 只重渲染引脚复用页（保持当前页不变）
+  const idx=PAGES.findIndex(p=>p.n==='引脚复用');
+  if(idx>=0){ $('page-'+idx).innerHTML=PAGES[idx].render(); }
+}
+
+/* 视图 1：按引脚 */
+function pmByPin(){
+  const rows=PINS.map((p,i)=>{
+    // 只列该引脚支持的功能（NONE 始终可选）
+    const opts=FUNCS.filter(f=>pinSupports(p.name,f))
+      .map(f=>`<option value="${f}" ${f===p.func?'selected':''}>${funcCN(f)}</option>`).join('');
+    const caps=(PIN_CAPS[p.name]||[]).map(funcCN).join(', ')||'—';
+    return `<tr class="${p.func!=='NONE'?'used':''}">
+      <td class=pinname>${p.name}</td>
+      <td><select id="pf-${i}" onchange="pinChanged(${i})">${opts}</select></td>
+      <td><input id="pp1-${i}" value="${p.p1}" title="参数1（GPIO上拉/通道等）"></td>
+      <td><input id="pp2-${i}" value="${p.p2}" title="参数2"></td>
+      <td><input id="parg-${i}" value="${p.arg}" title="扩展参数（GPIO输出电平）"></td>
+      <td class=caps title="该引脚支持的外设">${caps}</td>
+      <td><button class="btn sm" onclick="applyPin(${i})">应用</button></td>
+    </tr>`;
+  }).join('');
+  return `<table><thead><tr><th>引脚</th><th>功能</th><th>参数1</th><th>参数2</th><th>扩展</th><th>支持外设</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+/* 视图 2：按外设（手风琴卡片：每个外设一行，点击展开信号配置） */
+function pmByFunc(){
+  let html='';
+  for(const c of TREE){
+    for(const inst of c.insts){
+      const id=c.cat+':'+inst.name;
+      const open=PM_OPEN===id;
+      const iCnt=inst.sigs.reduce((m,[f])=>m+byFunc(f).length,0);
+      // 头部已配置引脚 chips（汇总该外设所有信号）
+      const usedChips=inst.sigs.flatMap(([f])=>byFunc(f).map(p=>
+        `<span class=chip>${p.name}<a onclick="event.stopPropagation();clearPin(${PINS.indexOf(p)})" title="移除">×</a></span>`)).join('');
+      html+=`<div class="acc ${open?'open':''}">
+        <div class=acc-hd onclick="pmTg('${id}')">
+          <span class=caret>▶</span>
+          <span class=ic>${c.ic}</span>
+          <span class=nm>${inst.name}</span>
+          <span class=cat>${c.cat}</span>
+          <span class=pins>${usedChips}</span>
+          <span class=cnt>${iCnt?iCnt+' 已用':''}</span>
+        </div>`;
+      if(open){
+        html+='<div class=acc-bd>'+inst.sigs.map(([func,short])=>pmSigRow(func,short)).join('')+'</div>';
+      }
+      html+='</div>';
+    }
+  }
+  return `<div class=pmacc>${html||'<div class=pmempty>无外设</div>'}</div>`;
+}
+/* 展开行内的单个信号配置：信号名 | 已用引脚 | 添加 */
+function pmSigRow(func,short){
+  const pins=PINS.map((p,i)=>({p,i})).filter(x=>x.p.func===func);
+  const chips=pins.map(({p,i})=>
+    `<span class=chip>${p.name}<a onclick="clearPin(${i})" title="移除">×</a></span>`).join('');
+  const avail=PINS.map((p,i)=>({p,i}))
+    .filter(x=>x.p.func==='NONE' && pinSupports(x.p.name,func));
+  const opts=avail.map(({p,i})=>`<option value="${i}">${p.name}</option>`).join('');
+  const add=avail.length
+    ? `<select id="add-${func}"><option value="">选择引脚...</option>${opts}</select>
+       <button class="btn sm" onclick="addPin('${func}')">添加</button>`
+    : `<span class=muted>无可用引脚</span>`;
+  return `<div class=acc-row>
+    <span class=sig><b>${short}</b><span>${func}</span></span>
+    <span class=used>${chips||'<span class=muted>未配置</span>'}</span>
+    <span class=add>${add}</span>
+  </div>`;
+}
+let PM_OPEN='';
+function pmTg(id){ PM_OPEN = PM_OPEN===id ? '' : id; pmRerender(); }
+function pmRerender(){
+  const idx=PAGES.findIndex(p=>p.n==='引脚复用');
+  if(idx>=0){ $('page-'+idx).innerHTML=PAGES[idx].render(); }
+}
+async function clearPin(i){
+  await call(null,`/api/pin?pin=${i}&func=NONE`,'POST');
+  toast('已移除','ok'); await refreshPins();
+}
+async function addPin(f){
+  const sel=$('add-'+f); const i=sel.value;
+  if(i===''){ toast('请选择引脚','err'); return }
+  await call(null,`/api/pin?pin=${i}&func=${f}`,'POST');
+  toast('已添加','ok'); await refreshPins();
+}
+
+function pinChanged(i){ /* 可在此根据 func 显示/隐藏参数列，暂略 */ }
+async function applyPin(i){
+  const f=$('pf-'+i).value, p1=V('pp1-'+i), p2=V('pp2-'+i), arg=V('parg-'+i);
+  const r=await call(null,`/api/pin?pin=${i}&func=${f}&p1=${p1}&p2=${p2}&arg=${arg}`,'POST');
+  if(r&&r.startsWith('set')){ toast('已应用','ok'); await refreshPins(); }
+}
+
+/* ---------- 渲染：GPIO（动态） ---------- */
+function renderGPIO(){
+  const outs=byFunc('GPIO_OUT'), ins=byFunc('GPIO_IN');
+  if(!outs.length&&!ins.length) return emptyCard('GPIO','⚙','未配置 GPIO 引脚。请先在「引脚复用」页将引脚设为 GPIO_IN / GPIO_OUT。');
+  let h='';
+  if(outs.length){
+    h+=`<div class=card><div class=hd><span class=ic>⚙</span>GPIO 输出<span class=sub>${outs.length} 个</span></div><div class=bd>`;
+    for(const p of outs){
+      const idx=PINS.indexOf(p);
+      h+=`<div class=ctrl><span class=name>${p.name}</span>
+        <button class="btn sm ${p.arg?'on':''}" onclick="gpioSet(${idx},1)">高</button>
+        <button class="btn sm ghost" onclick="gpioSet(${idx},0)">低</button>
+        <span class=val id="gv-${idx}">${p.arg?'1':'0'}</span></div>`;
+    }
+    h+=`</div></div>`;
+  }
+  if(ins.length){
+    h+=`<div class=card><div class=hd><span class=ic>⇩</span>GPIO 输入<span class=sub>${ins.length} 个</span></div><div class=bd>`;
+    for(const p of ins){
+      const idx=PINS.indexOf(p);
+      h+=`<div class=ctrl><span class=name>${p.name}</span>
+        <button class="btn sm" onclick="gpioRead(${idx})">读取</button>
+        <span class=val id="gv-${idx}">—</span></div>`;
+    }
+    h+=`</div></div>`;
+  }
+  return h;
+}
+async function gpioSet(i,val){
+  await call(null,`/api/gpio?pin=${i}&val=${val}`,'POST');
+  const e=$('gv-'+i); if(e) e.textContent=val;
+}
+async function gpioRead(i){
+  const t=await call(null,`/api/gpio?pin=${i}`);
+  const m=t&&t.match(/val=(-?\d+)/); const e=$('gv-'+i);
+  if(e&&m) e.textContent=m[1];
+}
+
+/* ---------- 渲染：ADC（动态） ---------- */
+function renderADC(){
+  const adcs=byFunc('ADC');
+  if(!adcs.length) return emptyCard('ADC','◈','未配置 ADC 引脚。请先在「引脚复用」页将引脚设为 ADC。');
+  let h=`<div class=card><div class=hd><span class=ic>◈</span>ADC 采集<span class=sub>${adcs.length} 个</span></div><div class=bd>`;
+  for(const p of adcs){
+    const idx=PINS.indexOf(p);
+    h+=`<div class=ctrl><span class=name>${p.name}</span>
+      <button class="btn sm" onclick="adcRead(${idx})">读取</button>
+      <span class=val id="av-${idx}">—</span></div>`;
+  }
+  h+=`<div class=row style="margin-top:12px"><button class="btn ghost" onclick="adcReadAll()">全部读取</button></div></div></div>`;
+  return h;
+}
+async function adcRead(i){
+  const t=await call(null,`/api/adc?ch=${i}`);
+  const m=t&&t.match(/val=(-?\d+)/); const e=$('av-'+i);
+  if(e&&m) e.textContent=m[1];
+}
+function adcReadAll(){ for(const p of byFunc('ADC')) adcRead(PINS.indexOf(p)); }
+
+/* ---------- 渲染：PWM（动态） ---------- */
+function renderPWM(){
+  const pwms=byFunc('PWM');
+  if(!pwms.length) return emptyCard('PWM','▤','未配置 PWM 引脚。请先在「引脚复用」页将引脚设为 PWM。');
+  let h=`<div class=card><div class=hd><span class=ic>▤</span>PWM 输出<span class=sub>${pwms.length} 个</span></div><div class=bd>`;
+  for(const p of pwms){
+    const idx=PINS.indexOf(p);
+    h+=`<div class=ctrl><span class=name>${p.name}</span>
+      <label>周期</label><input id="pw-${idx}" value="1000">
+      <label>占空</label><input id="pd-${idx}" value="500">
+      <button class="btn sm" onclick="pwmSet(${idx})">应用</button>
+      <span class=val id="pv-${idx}">—</span></div>`;
+  }
+  h+=`</div></div>`;
+  return h;
+}
+async function pwmSet(i){
+  const t=await call(null,`/api/pwm?ch=${i}&period=${V('pw-'+i)}&duty=${V('pd-'+i)}&en=1`,'POST');
+  const e=$('pv-'+i); if(e) e.textContent=t||'ok';
+}
+
+/* ---------- 渲染：网络 ---------- */
+function renderNet(){
+  return `<div class=grid>
+    <div class=card><div class=hd><span class=ic>⇄</span>路由表</div><div class=bd>
+      <div class=row><label>目标</label><input id=rd value="0"><label>掩码</label><input id=rm value="0"><label>通道</label><input id=rc value="0"></div>
+      <div class=row>
+        <button class="btn" onclick="call('out-route','/api/route/add?dest='+V('rd')+'&mask='+V('rm')+'&ch='+V('rc'),'POST')">添加</button>
+        <button class="btn ghost" onclick="call('out-route','/api/route/del?dest='+V('rd')+'&mask='+V('rm'),'POST')">删除</button>
+        <button class="btn ghost" onclick="call('out-route','/api/routes')">列出</button>
+      </div>
+      <div class=out id=out-route>—</div></div></div>
+    <div class=card><div class=hd><span class=ic>⊞</span>DHCP 服务器</div><div class=bd>
+      <div class=row><label>IP</label><input id=di value="192.168.7.2"><label>掩码</label><input id=dm value="255.255.255.0"></div>
+      <div class=row>
+        <button class="btn" onclick="call('out-dhcp','/api/dhcp?ip='+V('di')+'&mask='+V('dm'),'POST')">设置</button>
+        <button class="btn ghost" onclick="call('out-dhcp','/api/dhcp')">状态</button>
+      </div>
+      <div class=out id=out-dhcp>—</div></div></div>
+  </div>`;
+}
+
+/* ---------- 渲染：蓝牙 ---------- */
+function renderBLE(){
+  return `<div class=card><div class=hd><span class=ic>◉</span>BLE 状态</div><div class=bd>
+    <div class=row><button class="btn" onclick="call('out-ble','/api/ble')">查询状态</button></div>
+    <div class=out id=out-ble>—</div></div></div>`;
+}
+
+/* ---------- 渲染：SWIO 烧录 ---------- */
+function renderSWIO(){
+  const swios=byFunc('SWIO');
+  const note=swios.length
+    ? `已配置 SWIO 引脚：<b>${swios.map(p=>p.name).join(', ')}</b>`
+    : `未配置 SWIO 引脚。请先在「引脚复用」页将某引脚设为 SWIO。`;
+  return `<div class=card><div class=hd><span class=ic>⬇</span>SWIO 固件烧录</div><div class=bd>
+    <div class=row style="color:var(--muted);font-size:13px">${note}</div>
+    <div class=row>
+      <button class="btn ghost" onclick="call('out-swio','/api/swio/handshake')">握手</button>
+      <button class="btn ghost" onclick="call('out-swio','/api/swio')">进度</button>
+    </div>
+    <div class=row><label>地址</label><input id=sa value="0x08000000"><input type=file id=sf accept=.bin>
+      <button class="btn danger" onclick=flash()>烧录</button></div>
+    <div class=out id=out-swio>—</div></div></div>`;
+}
 async function flash(){
   const f=$('sf').files[0];
   if(!f){toast('请先选择固件文件','err'); return}
-  const out=$('out-swio');
-  out.textContent=`上传中 ${f.size} 字节…`;
+  const out=$('out-swio'); out.textContent=`上传中 ${f.size} 字节…`;
   try{
     setStatus('wait');
     const r=await fetch(H()+'/api/swio/flash?addr='+V('sa'),{method:'POST',body:f});
-    const t=await r.text();
-    out.textContent=t; setStatus('on');
+    const t=await r.text(); out.textContent=t; setStatus('on');
     toast(t.startsWith('OK')?'烧录成功':'烧录失败', t.startsWith('OK')?'ok':'err');
-    call('out-swio','/api/swio');
-  }catch(e){
-    out.textContent='错误: '+e.message; setStatus('off'); toast('烧录失败','err');
-  }
+  }catch(e){ out.textContent='错误: '+e.message; setStatus('off'); toast('烧录失败','err'); }
 }
 
-buildNav(); buildPages();
+/* ---------- 渲染：配置 ---------- */
+function renderCfg(){
+  return `<div class=card><div class=hd><span class=ic>⚙</span>配置管理</div><div class=bd>
+    <div class=row>
+      <button class="btn" onclick="call('out-cfg','/api/save','POST')">保存到 Flash</button>
+      <button class="btn ghost" onclick="call('out-cfg','/api/load','POST').then(refreshPins)">从 Flash 加载</button>
+    </div>
+    <div class=out id=out-cfg>—</div></div></div>
+
+  <div class=card style="margin-top:16px"><div class=hd><span class=ic>⇅</span>导入 / 导出配置</div><div class=bd>
+    <div class=row>
+      <button class="btn" onclick="exportCfg()">⬇ 导出为 JSON</button>
+      <label class="btn ghost" style="cursor:pointer">⬆ 导入 JSON
+        <input type=file accept=".json,application/json" style="display:none" onchange="importCfg(this)">
+      </label>
+    </div>
+    <div class=muted style="margin-top:8px">导出当前引脚配置为 JSON 文件备份；导入会覆盖现有配置并写入 Flash。</div>
+    <div class=out id=out-io>—</div></div></div>`;
+}
+
+/* 导出配置为 JSON 文件下载 */
+function exportCfg(){
+  const data={ chip:V('host'), version:1, ts:new Date().toISOString(),
+    pins:PINS.map(p=>({name:p.name, func:p.func, p1:p.p1, p2:p.p2, arg:p.arg})) };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='gateway-pinmux-'+Date.now()+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+  $('out-io').textContent='已导出 '+data.pins.filter(p=>p.func!=='NONE').length+' 条配置';
+  toast('已导出配置','ok');
+}
+/* 导入 JSON 配置：逐条写入并保存 */
+async function importCfg(input){
+  const file=input.files[0]; if(!file) return;
+  const out=$('out-io');
+  try{
+    const data=JSON.parse(await file.text());
+    const pins=data.pins||data;   // 兼容纯数组格式
+    if(!Array.isArray(pins)) throw new Error('格式错误：缺少 pins 数组');
+    out.textContent='导入中...';
+    let n=0;
+    for(const p of pins){
+      if(!p.func||p.func==='NONE') continue;
+      const i=PINS.findIndex(x=>x.name===p.name);
+      if(i<0) continue;
+      await call(null,`/api/pin?pin=${i}&func=${p.func}&p1=${p.p1||0}&p2=${p.p2||0}&arg=${p.arg||0}`,'POST');
+      n++;
+    }
+    await refreshPins();
+    out.textContent='已导入 '+n+' 条配置';
+    toast('已导入 '+n+' 条配置','ok');
+  }catch(e){
+    out.textContent='导入失败: '+e.message;
+    toast('导入失败','err');
+  }
+  input.value='';   // 允许重复导入同一文件
+}
+
+function emptyCard(title,ic,msg){
+  return `<div class=card><div class=hd><span class=ic>${ic}</span>${title}</div><div class=bd><div class=empty>${msg}</div></div></div>`;
+}
+
+/* ---------- 初始化 ---------- */
 $('host').value=H();
-call('out-info','/api/info');
+buildNav(); buildPages();          // 先用空 PINS 渲染基本界面
+refreshPins();                     // 再尝试拉取真实配置
 </script>
 </body>
 </html>

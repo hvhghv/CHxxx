@@ -218,22 +218,88 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 		uint32_t off = 0;
 		CAT("chip=CH59x\r\nclk=");
 		CATI((int32_t)FUNCONF_SYSTEM_CORE_CLOCK);
-		CAT("\r\nheap_free=0\r\n");
+		CAT("\r\n");
+		/* 芯片型号 ID（R8_CHIP_ID，固定值） */
+		CAT("chipid=");
+		CATI((int32_t)R8_CHIP_ID);
+		CAT("\r\n");
+		/* 芯片唯一 ID：FlashROM 信息区 0x0007F000，8 字节（ID + 校验和） */
+		{
+			const volatile uint8_t *uid = (const volatile uint8_t *)0x0007F000;
+			static const char hx[] = "0123456789ABCDEF";
+			char hex[3];
+			CAT("uid=");
+			for (int i = 0; i < 8; i++) {
+				uint8_t b = uid[i];
+				hex[0] = hx[b >> 4];
+				hex[1] = hx[b & 0xF];
+				hex[2] = '\0';
+				CAT(hex);
+			}
+			CAT("\r\n");
+		}
+		CAT("heap_free=0\r\n");
 		http_send(pcb, http_200, body);
 		return;
 	}
 
-	/* 引脚复用列表 */
+	/* 引脚复用列表：每行 `<pin> <func> <p1> <p2> <arg1>`（流式发送） */
 	if (strncmp(req, "GET /api/pins", 13) == 0) {
-		uint32_t off = 0;
+		tcp_write(pcb, http_200, (u16_t)strlen(http_200), TCP_WRITE_FLAG_COPY);
+		char line[48];
 		for (int i = 0; i < PIN_COUNT; i++) {
-			if (g_pin_cfg[i].func == PIN_FUNC_NONE) continue;
-			CAT(pinmux_pin_name(i));
-			CAT("=");
-			CAT(pinmux_func_name(g_pin_cfg[i].func));
-			CAT("\r\n");
-			if (off >= sizeof(body) - 32) break;
+			uint32_t off = 0;
+			off = s_cat(line, off, sizeof(line), pinmux_pin_name(i));
+			off = s_cat(line, off, sizeof(line), " ");
+			off = s_cat(line, off, sizeof(line), pinmux_func_name(g_pin_cfg[i].func));
+			off = s_cat(line, off, sizeof(line), " ");
+			off = s_int(line, off, sizeof(line), g_pin_cfg[i].param1);
+			off = s_cat(line, off, sizeof(line), " ");
+			off = s_int(line, off, sizeof(line), g_pin_cfg[i].param2);
+			off = s_cat(line, off, sizeof(line), " ");
+			off = s_int(line, off, sizeof(line), g_pin_cfg[i].arg1);
+			off = s_cat(line, off, sizeof(line), "\r\n");
+			tcp_write(pcb, line, (u16_t)off, TCP_WRITE_FLAG_COPY);
 		}
+		tcp_output(pcb);
+		return;
+	}
+
+	/* 设置引脚配置：POST /api/pin?pin=N&func=F[&p1=X&p2=Y&arg=Z]
+	 * func 取值：NONE/GPIO_IN/GPIO_OUT/UART_TX/UART_RX/PWM/ADC/SPI/I2C/SWIO */
+	if (strncmp(req, "POST /api/pin", 13) == 0) {
+		int pin = query_int(req, "pin", -1);
+		const char *fs = query_str(req, "func");
+		uint32_t off = 0;
+		if (pin < 0 || pin >= PIN_COUNT || !fs) {
+			http_send(pcb, http_200, "ERR bad args\r\n");
+			return;
+		}
+		/* 解析 func 名 → 枚举 */
+		static const char *names[] = { "NONE","GPIO_IN","GPIO_OUT","UART_TX",
+			"UART_RX","PWM","ADC","SPI","I2C","SWIO" };
+		int func = -1;
+		for (int i = 0; i < 10; i++) {
+			size_t n = strlen(names[i]);
+			if (strncmp(fs, names[i], n) == 0 && (fs[n] == '\0' || fs[n] == ' ' || fs[n] == '&')) {
+				func = i; break;
+			}
+		}
+		if (func < 0) {
+			http_send(pcb, http_200, "ERR bad func\r\n");
+			return;
+		}
+		pinmux_set_func(pin, func);
+		g_pin_cfg[pin].param1 = (uint8_t)query_int(req, "p1", 0);
+		g_pin_cfg[pin].param2 = (uint8_t)query_int(req, "p2", 0);
+		g_pin_cfg[pin].arg1   = (uint8_t)query_int(req, "arg", 0);
+		pinmux_apply(pin);
+		int sr = settings_save();
+		CAT("set ");
+		CAT(pinmux_pin_name(pin));
+		CAT("=");
+		CAT(pinmux_func_name(g_pin_cfg[pin].func));
+		CAT(sr == 0 ? " (saved)\r\n" : " (save failed)\r\n");
 		http_send(pcb, http_200, body);
 		return;
 	}
