@@ -135,11 +135,15 @@ void periph_uart_init(uart_cfg_t *cfg)
 	/* 复位 FIFO */
 	*uart_reg(u, 0x02) = 0x07;   /* FCR: enable + clear */
 
-	/* 波特率：DL = Fsys / (16 * baud) */
-	uint32_t dl = FUNCONF_SYSTEM_CORE_CLOCK / (16 * cfg->baud);
+	/* 波特率：baud = Fsys * 2 / DIV / 16 / DL（数据手册 9.3.1）
+	 * DIV 固定 1（数据手册：通常写入 1）；DL = Fsys*2/16/baud（最高 7.5Mbps @60MHz） */
+	uint32_t dl = (uint32_t)(((uint64_t)FUNCONF_SYSTEM_CORE_CLOCK * 2) / 16 / cfg->baud);
+	if (dl < 1) dl = 1;
+	if (dl > 65535) dl = 65535;
 	*uart_reg(u, 0x03) = 0x80;   /* LCR: DLAB=1 */
 	*uart_reg(u, 0x0C) = (uint8_t)(dl & 0xFF);        /* DLL */
 	*uart_reg(u, 0x0D) = (uint8_t)((dl >> 8) & 0xFF); /* DLM */
+	*uart_reg(u, 0x0E) = 1;      /* DIV: 预分频固定 1 */
 
 	/* LCR: 8 位数据 + 奇偶 + 停止位 */
 	uint8_t lcr = 0x03;          /* 8 data bits */

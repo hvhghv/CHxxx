@@ -13,39 +13,77 @@
 #define g_pin_cfg   (g_cfg.pins)
 
 /* ---------------------------------------------------------------------------
- * 串口波特率档位表（常见值）
+ * 串口波特率：波特率 ↔ 16 位分频值 DL（DIV 固定为 1）
+ * 公式（数据手册 9.3.1）：baud = Fsys * 2 / DIV / 16 / DL
+ *   DIV = R8_UARTx_DIV 固定 1（数据手册：通常写入 1）；DL = R16_UARTx_DL（16 位）
+ * Fsys=60MHz：baud = 7.5M / DL，最高 7.5Mbps（DL=1），最低 114bps（DL=65535）。
+ * 注：高频波特率受整数分频限制（如 2M/3M 无法精确，实际 2.5M/3.75M）。
  * ------------------------------------------------------------------------- */
-const uint32_t g_uart_baud_table[UART_BAUD_COUNT] = {
-	9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
-};
-#define UART_BAUD_DEFAULT_IDX  4   /* 115200 */
+#define UART_FSYS  FUNCONF_SYSTEM_CORE_CLOCK
 
-int uart_baud_index(uint32_t baud)
+uint16_t uart_baud_to_div(uint32_t baud)
 {
-	for (int i = 0; i < UART_BAUD_COUNT; i++)
-		if (g_uart_baud_table[i] == baud) return i;
-	return UART_BAUD_DEFAULT_IDX;
+	if (baud == 0) baud = UART_BAUD_DEFAULT;
+	uint32_t dl = (uint32_t)(((uint64_t)UART_FSYS * 2) / 16 / baud);
+	if (dl < 1) dl = 1;
+	if (dl > 65535) dl = 65535;
+	return (uint16_t)dl;
 }
 
-uint32_t uart_baud_value(int idx)
+uint32_t uart_div_to_baud(uint16_t dl)
 {
-	if (idx < 0 || idx >= UART_BAUD_COUNT) return g_uart_baud_table[UART_BAUD_DEFAULT_IDX];
-	return g_uart_baud_table[idx];
+	if (dl == 0) dl = uart_baud_to_div(UART_BAUD_DEFAULT);
+	return (uint32_t)(((uint64_t)UART_FSYS * 2) / 16 / dl);
 }
 
 /* ---------------------------------------------------------------------------
- * 引脚编号 ↔ ch32fun 引脚宏
- *   0..15  → PA0..PA15
- *   16..39 → PB0..PB23
+ * 引脚映射表：紧凑编号 → 物理引脚号
+ *   编码：PA0-15 = 0..15；PB0-23 = 0x20 | n（bit5 标记 PB）
+ * 每芯片不同（CH591 QFN28 引脚少于 CH592 QFN32），由 GW_PIN_COUNT 控制。
+ * 用 uint8_t 存（物理引脚号 ≤ 0x37），最省 Flash。
  * ------------------------------------------------------------------------- */
+#define PM_PB(n)   (0x20 | (n))   /* PB 编码 */
+
+#if defined(CH591)
+/* CH591F QFN28：20 个 GPIO（据数据手册引脚图） */
+static const uint8_t g_pin_map[PIN_COUNT] = {
+	4, 5, 8, 9, 10, 11, 12, 13, 14, 15,    /* PA4/5/8/9/10/11/12/13/14/15 */
+	PM_PB(4), PM_PB(7), PM_PB(10), PM_PB(11), PM_PB(12), PM_PB(13), PM_PB(14), PM_PB(15),  /* PB4/7/10-15 */
+	PM_PB(22), PM_PB(23),                   /* PB22-23 */
+};
+#else
+/* CH592X QFN32：24 个 GPIO（据数据手册引脚图）
+ * 左：PA4-15；右：PB0/4/6/7/10-15/22-23 */
+static const uint8_t g_pin_map[PIN_COUNT] = {
+	4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,    /* PA4-15 */
+	PM_PB(0), PM_PB(4), PM_PB(6), PM_PB(7),      /* PB0/4/6/7 */
+	PM_PB(10), PM_PB(11), PM_PB(12), PM_PB(13), PM_PB(14), PM_PB(15),  /* PB10-15 */
+	PM_PB(22), PM_PB(23),                        /* PB22-23 */
+};
+#endif
+
+/* 紧凑编号 → ch32fun 引脚号（越界返回 0xFFFFFFFF） */
 static u32 pin_to_ch32fun(int pin)
 {
-	if (pin < 16) {
-		return (u32)pin;              /* PA0..PA15 */
-	} else if (pin < 40) {
-		return PB | (u32)(pin - 16);  /* PB0..PB23 */
-	}
-	return 0xFFFFFFFF;
+	if (pin < 0 || pin >= PIN_COUNT) return 0xFFFFFFFF;
+	uint8_t m = g_pin_map[pin];
+	return (m & 0x20) ? (PB | (u32)(m & 0x1F)) : (u32)m;
+}
+
+/* 紧凑编号 → 引脚名（如 "PA0" / "PB10"） */
+static const char *pin_name_of(int pin)
+{
+	if (pin < 0 || pin >= PIN_COUNT) return "??";
+	uint8_t m = g_pin_map[pin];
+	static char buf[8];
+	int n = 0;
+	uint8_t num = m & 0x1F;
+	buf[n++] = 'P';
+	buf[n++] = (m & 0x20) ? 'B' : 'A';
+	if (num >= 10) buf[n++] = (char)('0' + num / 10);
+	buf[n++] = (char)('0' + num % 10);
+	buf[n] = '\0';
+	return buf;
 }
 
 /* ---------------------------------------------------------------------------
@@ -53,22 +91,7 @@ static u32 pin_to_ch32fun(int pin)
  * ------------------------------------------------------------------------- */
 const char *pinmux_pin_name(int pin)
 {
-	static char buf[8];
-	int n = 0;
-	if (pin < 16) {
-		buf[n++] = 'P'; buf[n++] = 'A';
-	} else if (pin < 40) {
-		buf[n++] = 'P'; buf[n++] = 'B';
-		pin -= 16;
-	} else {
-		buf[0] = '?'; buf[1] = '?'; buf[2] = '\0';
-		return buf;
-	}
-	/* 十进制（最多 2 位） */
-	if (pin >= 10) buf[n++] = (char)('0' + pin / 10);
-	buf[n++] = (char)('0' + pin % 10);
-	buf[n] = '\0';
-	return buf;
+	return pin_name_of(pin);
 }
 
 const char *pinmux_func_name(int func)
@@ -125,11 +148,12 @@ int pinmux_apply(int pin)
 	case PIN_FUNC_UART_TX:
 		funPinMode(p, GPIO_ModeOut_PP_5mA);
 		/* TX 引脚负责初始化整个 UART（波特率/校验/停止位）
-		 * param2 编码：bit0=模式, bit1-2=校验, bit3=停止位 */
+		 * param2 编码：bit0=模式, bit1-2=校验, bit3=停止位
+		 * uart_dl = 波特率分频值（0=默认 115200） */
 		{
 			uart_cfg_t uc;
 			uc.uart      = c->param1;                       /* UART 号 */
-			uc.baud      = uart_baud_value(c->arg1);        /* 波特率档位 */
+			uc.baud      = uart_div_to_baud(c->uart_dl);    /* 分频值 → 波特率 */
 			uc.data_bits = 8;
 			uc.parity    = (uint8_t)((c->param2 >> 1) & 0x03);     /* bit1-2 校验 */
 			uc.stop_bits = (uint8_t)((c->param2 >> 3) & 0x01) + 1; /* bit3 停止位 */

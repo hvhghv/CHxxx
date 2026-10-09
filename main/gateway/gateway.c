@@ -466,7 +466,7 @@ static void uart_show(int idx)
 	cdc_put_i32(&tx_a, c->param1);
 	cdc_puts(&tx_a, (c->param2 & 1) == PIN_UART_MODE_FRAME ? " frame" : " forward");
 	cdc_puts(&tx_a, " baud=");
-	cdc_put_u32(&tx_a, uart_baud_value(c->arg1));
+	cdc_put_u32(&tx_a, uart_div_to_baud(c->uart_dl));
 	uint8_t p = (c->param2 >> 1) & 3;
 	cdc_puts(&tx_a, p == 1 ? " odd" : p == 2 ? " even" : " none");
 	cdc_puts(&tx_a, " stop=");
@@ -503,7 +503,7 @@ static void cmd_uart(const char *arg)
 		else if (strncmp(v, "forward", 7) == 0) c->param2 &= ~1;
 		else goto usage;
 	} else if (strncmp(arg, "baud ", 5) == 0) {
-		c->arg1 = (uint8_t)uart_baud_index((uint32_t)atoi(arg + 5));
+		c->uart_dl = uart_baud_to_div((uint32_t)atoi(arg + 5));
 	} else if (strncmp(arg, "parity ", 7) == 0) {
 		const char *v = arg + 7;
 		uint8_t p;

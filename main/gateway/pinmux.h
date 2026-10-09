@@ -15,11 +15,27 @@
 extern "C" {
 #endif
 
-/* GPIO 引脚编号（0..23 表示 PA0..PA15, PB0..PB7；24..47 表示 PB8..PB23）
- * 简化：用 0..15 = PA0..PA15，16..39 = PB0..PB23 */
+/* 引脚数量（由 CMake 传入 GW_PIN_COUNT；缺省按芯片）
+ *   CH592（QFN32）：24 个 GPIO（PA4-15 + PB0/4/6/7/10-15/22-23）
+ *   CH591（QFN28）：20 个 GPIO（PA4/5/8/9/10-15 + PB4/7/10-15/22-23）
+ * 紧凑编号 0..GW_PIN_COUNT-1 → 物理引脚（见 pinmux.c 的 g_pin_map[]） */
+#ifndef GW_PIN_COUNT
+#  if defined(CH591)
+#    define GW_PIN_COUNT 20
+#  else
+#    define GW_PIN_COUNT 24
+#  endif
+#endif
+
+/* GPIO 引脚编号（紧凑编号，每芯片引脚表不同）
+ * 编号 0..PIN_COUNT-1 通过 g_pin_map[] 映射到物理引脚（ch32fun 引脚号）。
+ * 紧凑编号省 Flash/RAM（CH591 QFN28 引脚少于 CH592 QFN32）。 */
+#define PIN_COUNT   GW_PIN_COUNT
+
+/* 物理引脚号（ch32fun 格式：PA0-15 = 0..15，PB0-23 = PB|n）
+ * 由 pinmux.c 的 g_pin_map[] 提供 */
 #define PIN_PA(n)   ((n) + 0)
-#define PIN_PB(n)   ((n) + 16)
-#define PIN_COUNT   40
+#define PIN_PB(n)   (16 + (n))   /* 紧凑编号空间内 PB 偏移（仅用于构建映射表） */
 
 /* 引脚功能类型 */
 typedef enum {
@@ -62,14 +78,15 @@ typedef enum {
 	PIN_UART_MODE_FRAME,         /* 帧模式 */
 } pin_uart_mode_t;
 
-/* 串口波特率档位（存索引，避免 32 位字段）。
- * 索引 0..N-1 对应下表，非法索引回退到 115200。 */
-#define UART_BAUD_COUNT  8
-extern const uint32_t g_uart_baud_table[UART_BAUD_COUNT];
-/* 波特率 → 档位索引（找不到则返回默认 115200 的索引） */
-int uart_baud_index(uint32_t baud);
-/* 档位索引 → 波特率 */
-uint32_t uart_baud_value(int idx);
+/* 串口波特率：存 16 位分频值（R16_UARTx_DL），支持任意波特率（最高 6Mbps）。
+ * 波特率公式（数据手册 9.3.1）：baud = Fsys * 2 / DIV / 16 / DL
+ * 其中 DIV = R8_UARTx_DIV（1..127），由 uart_baud_to_div() 自动选择。
+ * 0 表示未设置（回退 115200）。 */
+#define UART_BAUD_DEFAULT  115200
+/* 波特率 → 16 位 DL 分频值（自动选 DIV 使误差最小）；baud=0 或非法返回默认值 */
+uint16_t uart_baud_to_div(uint32_t baud);
+/* 16 位 DL 分频值 → 波特率（用于显示） */
+uint32_t uart_div_to_baud(uint16_t dl);
 
 /* 串口校验 */
 typedef enum {
@@ -89,15 +106,16 @@ typedef enum {
  *   param2 = 编码参数：bit0=模式（pin_uart_mode_t）
  *                        bit1-2=校验（pin_uart_parity_t）
  *                        bit3=停止位（pin_uart_stop_t）
- *   arg1   = 波特率档位索引（uart_baud_index） */
+ *   uart_dl = 波特率分频值（uart_baud_to_div，0=默认 115200） */
 
 /* 单个引脚的配置 */
 typedef struct {
 	uint8_t  func;          /* pin_func_t */
-	uint8_t  flags;         /* 功能相关标志 */
+	uint8_t  flags;         /* 功能相关标志（UART：bit0-1=CDC 绑定号） */
 	uint8_t  param1;        /* 通用参数（如 UART 号、PWM 通道） */
 	uint8_t  param2;        /* 通用参数 */
 	uint8_t  arg1;          /* 扩展参数（GPIO 输出电平 0/1） */
+	uint16_t uart_dl;       /* UART 波特率分频值（0=默认 115200） */
 } pin_cfg_t;
 
 /* 全局引脚配置表：别名到统一配置 g_cfg.pins

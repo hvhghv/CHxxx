@@ -296,7 +296,11 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			off = s_cat(line, off, sizeof(line), " ");
 			off = s_int(line, off, sizeof(line), g_pin_cfg[i].param2);
 			off = s_cat(line, off, sizeof(line), " ");
-			off = s_int(line, off, sizeof(line), g_pin_cfg[i].arg1);
+			/* 第 5 字段：UART 输出波特率值（其余输出 arg1） */
+			if (g_pin_cfg[i].func == PIN_FUNC_UART_TX || g_pin_cfg[i].func == PIN_FUNC_UART_RX)
+				off = s_int(line, off, sizeof(line), (int32_t)uart_div_to_baud(g_pin_cfg[i].uart_dl));
+			else
+				off = s_int(line, off, sizeof(line), g_pin_cfg[i].arg1);
 			off = s_cat(line, off, sizeof(line), " ");
 			off = s_int(line, off, sizeof(line), g_pin_cfg[i].flags & 0x03);   /* bind */
 			off = s_cat(line, off, sizeof(line), "\r\n");
@@ -349,6 +353,11 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			g_pin_cfg[pin].param1 = (uint8_t)query_int(req, "p1", 0);
 		g_pin_cfg[pin].param2 = (uint8_t)query_int(req, "p2", 0);
 		g_pin_cfg[pin].arg1   = (uint8_t)query_int(req, "arg", 0);
+		/* baud：UART 波特率（任意值，最高 6Mbps），转分频值存 uart_dl */
+		{
+			const char *bs = query_str(req, "baud");
+			if (bs) g_pin_cfg[pin].uart_dl = uart_baud_to_div((uint32_t)query_int(req, "baud", 0));
+		}
 		/* bind：CDC 动态绑定号（0=自动/固定，1..N=CDC-B/C/D），存 flags bit0-1 */
 		{
 			const char *bs = query_str(req, "bind");

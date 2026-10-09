@@ -152,3 +152,15 @@ else()
     target_compile_definitions(gateway PRIVATE GW_CDC_DYNAMIC=0)
     message(STATUS "gateway CDC 动态绑定：关闭（固定映射）")
 endif()
+
+# ---- 引脚数量 --------------------------------------------------------------
+# 紧凑引脚编号空间（0..GW_PIN_COUNT-1），映射到物理引脚（见 pinmux.c g_pin_map）。
+#   20 = CH591F QFN28（PA4/5/8/9/10-15 + PB4/7/10-15/22-23）
+#   24 = CH592X QFN32（PA4-15 + PB0/4/6/7/10-15/22-23）
+# 减小该值可省 RAM（g_cfg.pins[] 数组）与 Flash。
+set(GW_PIN_COUNT 24 CACHE STRING "引脚数量")
+if(CHIP_SDK_RESOLVED STREQUAL "CH591")
+    set(GW_PIN_COUNT 20)
+endif()
+target_compile_definitions(gateway PRIVATE GW_PIN_COUNT=${GW_PIN_COUNT})
+message(STATUS "gateway 引脚数量：${GW_PIN_COUNT}")
