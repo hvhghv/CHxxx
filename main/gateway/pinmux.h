@@ -62,6 +62,35 @@ typedef enum {
 	PIN_UART_MODE_FRAME,         /* 帧模式 */
 } pin_uart_mode_t;
 
+/* 串口波特率档位（存索引，避免 32 位字段）。
+ * 索引 0..N-1 对应下表，非法索引回退到 115200。 */
+#define UART_BAUD_COUNT  8
+extern const uint32_t g_uart_baud_table[UART_BAUD_COUNT];
+/* 波特率 → 档位索引（找不到则返回默认 115200 的索引） */
+int uart_baud_index(uint32_t baud);
+/* 档位索引 → 波特率 */
+uint32_t uart_baud_value(int idx);
+
+/* 串口校验 */
+typedef enum {
+	PIN_UART_PARITY_NONE = 0,
+	PIN_UART_PARITY_ODD,
+	PIN_UART_PARITY_EVEN,
+} pin_uart_parity_t;
+
+/* 串口停止位 */
+typedef enum {
+	PIN_UART_STOP_1 = 0,
+	PIN_UART_STOP_2,
+} pin_uart_stop_t;
+
+/* UART 引脚配置字段约定（TX 与 RX 引脚共享同一 uart 号）：
+ *   param1 = UART 号（0..3，后端从 UARTn_TX/RX 名自动解析）
+ *   param2 = 编码参数：bit0=模式（pin_uart_mode_t）
+ *                        bit1-2=校验（pin_uart_parity_t）
+ *                        bit3=停止位（pin_uart_stop_t）
+ *   arg1   = 波特率档位索引（uart_baud_index） */
+
 /* 单个引脚的配置 */
 typedef struct {
 	uint8_t  func;          /* pin_func_t */

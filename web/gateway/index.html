@@ -120,6 +120,11 @@ td.caps{font-size:11px; color:var(--muted); font-family:ui-monospace,monospace; 
 .acc-row .used{flex:1; display:flex; gap:6px; flex-wrap:wrap; align-items:center}
 .acc-row .add{white-space:nowrap; display:flex; gap:6px; align-items:center}
 .acc-row .add select{width:auto; font-size:12px; padding:5px 8px}
+/* UART 参数配置行 */
+.uartcfg{display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:8px 12px; background:var(--bg); border-radius:8px; margin:6px 0 2px}
+.uartcfg .uc-label{font-size:11px; color:var(--muted); font-weight:600}
+.uartcfg label{display:flex; align-items:center; gap:5px; font-size:12px; color:var(--muted)}
+.uartcfg select{width:auto; font-size:12px; padding:4px 8px}
 .pmempty{color:var(--muted); text-align:center; padding:40px 20px; font-size:13px}
 .chip{display:inline-flex; align-items:center; gap:4px; background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:3px 8px; font-size:12px; font-family:ui-monospace,monospace}
 .chip a{color:var(--muted); cursor:pointer; font-size:14px; line-height:1; text-decoration:none}
@@ -268,7 +273,7 @@ async function refreshPins(){
     const t=await api('/api/pins');
     PINS=t.trim().split('\n').filter(Boolean).map(l=>{
       const a=l.trim().split(/\s+/);
-      return {name:a[0],func:a[1],p1:+(a[2]||0),p2:+(a[3]||0),arg:+(a[4]||0)};
+      return {name:a[0],func:a[1],p1:+(a[2]||0),p2:+(a[3]||0),arg:+(a[4]||0),bind:+(a[5]||0)};
     });
     buildNav(); buildPages();
     return true;
@@ -472,11 +477,64 @@ function pmSigRow(func,short){
     ? `<select id="add-${func}"><option value="">选择引脚...</option>${opts}</select>
        <button class="btn sm" onclick="addPin('${func}')">添加</button>`
     : `<span class=muted>无可用引脚</span>`;
-  return `<div class=acc-row>
+  // UART 信号：仅在 TX 行附加串口参数配置（TX/RX 共享同一 UART），置于 TX 行上方
+  const uartExtra=isUartTxFunc(func)?uartCfgRow(func):'';
+  return `${uartExtra}<div class=acc-row>
     <span class=sig><b>${short}</b><span>${func}</span></span>
     <span class=used>${chips||'<span class=muted>未配置</span>'}</span>
     <span class=add>${add}</span>
   </div>`;
+}
+/* 是否 UART TX 信号（UARTn_TX）——串口参数只在 TX 行显示 */
+function isUartTxFunc(f){ return /^UART\d_TX$/.test(f); }
+/* UART 参数配置行（模式/波特率/校验/停止位），作用于该 UART 的 TX 引脚 */
+const UART_BAUDS=[9600,19200,38400,57600,115200,230400,460800,921600];
+function uartCfgRow(func){
+  const m=func.match(/^UART(\d)_/); if(!m) return '';
+  const un=m[1];
+  // 找到该 UART 的 TX 引脚配置（参数以 TX 为准）
+  const tx=PINS.find(p=>p.func==='UART'+un+'_TX');
+  const rx=PINS.find(p=>p.func==='UART'+un+'_RX');
+  const cfg=tx||rx;
+  if(!cfg) return '';
+  const idx=PINS.indexOf(cfg);
+  const p2=cfg.p2;                   // 编码：bit0 模式, bit1-2 校验, bit3 停止位
+  const mode=p2&1;
+  const parity=(p2>>1)&3;
+  const stop=(p2>>3)&1;
+  const baudIdx=cfg.arg;             // 波特率档位
+  const bind=cfg.bind||0;            // CDC 绑定号（0=自动/固定）
+  const baudOpts=UART_BAUDS.map((b,i)=>`<option value="${i}" ${i===baudIdx?'selected':''}>${b}</option>`).join('');
+  // CDC 绑定下拉（动态绑定模式有效；固定映射时后端忽略）
+  const bindOpts=[[0,'自动'],[1,'CDC-B'],[2,'CDC-C'],[3,'CDC-D']]
+    .map(([v,n])=>`<option value="${v}" ${v===bind?'selected':''}>${n}</option>`).join('');
+  return `<div class=uartcfg>
+    <span class=uc-label>串口参数</span>
+    <label>模式 <select id="um-${un}">
+      <option value="0" ${mode===0?'selected':''}>CDC 转发</option>
+      <option value="1" ${mode===1?'selected':''}>帧模式</option>
+    </select></label>
+    <label>波特率 <select id="ub-${un}">${baudOpts}</select></label>
+    <label>校验 <select id="up-${un}">
+      <option value="0" ${parity===0?'selected':''}>无</option>
+      <option value="1" ${parity===1?'selected':''}>奇</option>
+      <option value="2" ${parity===2?'selected':''}>偶</option>
+    </select></label>
+    <label>停止位 <select id="us-${un}">
+      <option value="0" ${stop===0?'selected':''}>1</option>
+      <option value="1" ${stop===1?'selected':''}>2</option>
+    </select></label>
+    <label>CDC 绑定 <select id="uk-${un}">${bindOpts}</select></label>
+    <button class="btn sm" onclick="applyUart(${idx},'${un}')">应用</button>
+  </div>`;
+}
+async function applyUart(idx,un){
+  const mode=+V('um-'+un), baud=+V('ub-'+un), parity=+V('up-'+un), stop=+V('us-'+un), bind=+V('uk-'+un);
+  // p2 编码：bit0 模式, bit1-2 校验, bit3 停止位
+  const p2=(mode&1)|((parity&3)<<1)|((stop&1)<<3);
+  const f=PINS[idx].func;
+  await call(null,`/api/pin?pin=${idx}&func=${f}&p2=${p2}&arg=${baud}&bind=${bind}`,'POST');
+  toast('串口参数已应用','ok'); await refreshPins();
 }
 let PM_OPEN='';
 function pmTg(id){ PM_OPEN = PM_OPEN===id ? '' : id; pmRerender(); }

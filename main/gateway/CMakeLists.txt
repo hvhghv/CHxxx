@@ -122,3 +122,33 @@ else()
     target_compile_definitions(gateway PRIVATE GW_EMBED_WEBUI=0)
     message(STATUS "gateway 内嵌 Web UI：关闭（仅外部前端）")
 endif()
+
+# ---- CDC 数量 --------------------------------------------------------------
+# 控制 USB 申请多少个 CDC-ACM 接口（含终端口 CDC-A）。
+#   3 = 终端 + 2 个 UART 转发（CDC-A/B/C）—— CH591 默认（Flash/RAM 受限）
+#   4 = 终端 + 3 个 UART 转发（CDC-A/B/C/D）—— CH592 默认
+# 注意：CDC 数量受 USB 端点限制（CH59x 可用 EP1/2/3/5/6/7，EP4 不可用）。
+set(GW_CDC_COUNT 4 CACHE STRING "CDC-ACM 数量（3 或 4）")
+if(CHIP_SDK_RESOLVED STREQUAL "CH591" AND GW_CDC_COUNT GREATER 3)
+    message(STATUS "CH591 检测到：自动将 GW_CDC_COUNT 从 ${GW_CDC_COUNT} 降为 3（资源限制）")
+    set(GW_CDC_COUNT 3)
+endif()
+target_compile_definitions(gateway PRIVATE GW_CDC_COUNT=${GW_CDC_COUNT})
+message(STATUS "gateway CDC 数量：${GW_CDC_COUNT}")
+
+# ---- CDC 动态绑定 ----------------------------------------------------------
+# 开启：UART 可绑定到任意 CDC 转发口（绑定号存 pin_cfg.flags，可在 Web UI 配置）。
+# 关闭：固定映射（UART0→CDC-B, UART1→CDC-C, UART2→CDC-D），省 Flash。
+# 默认：CH592 开启；CH591 强制关闭（Flash 受限）。
+option(GW_CDC_DYNAMIC "CDC 动态绑定（UART 可绑定任意 CDC）" ON)
+if(GW_CDC_COUNT LESS 4 AND GW_CDC_DYNAMIC)
+    message(STATUS "CDC 数量 <4：自动关闭 GW_CDC_DYNAMIC（固定映射）")
+    set(GW_CDC_DYNAMIC OFF)
+endif()
+if(GW_CDC_DYNAMIC)
+    target_compile_definitions(gateway PRIVATE GW_CDC_DYNAMIC=1)
+    message(STATUS "gateway CDC 动态绑定：开启")
+else()
+    target_compile_definitions(gateway PRIVATE GW_CDC_DYNAMIC=0)
+    message(STATUS "gateway CDC 动态绑定：关闭（固定映射）")
+endif()

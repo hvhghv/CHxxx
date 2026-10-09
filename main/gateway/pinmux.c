@@ -13,6 +13,27 @@
 #define g_pin_cfg   (g_cfg.pins)
 
 /* ---------------------------------------------------------------------------
+ * 串口波特率档位表（常见值）
+ * ------------------------------------------------------------------------- */
+const uint32_t g_uart_baud_table[UART_BAUD_COUNT] = {
+	9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
+};
+#define UART_BAUD_DEFAULT_IDX  4   /* 115200 */
+
+int uart_baud_index(uint32_t baud)
+{
+	for (int i = 0; i < UART_BAUD_COUNT; i++)
+		if (g_uart_baud_table[i] == baud) return i;
+	return UART_BAUD_DEFAULT_IDX;
+}
+
+uint32_t uart_baud_value(int idx)
+{
+	if (idx < 0 || idx >= UART_BAUD_COUNT) return g_uart_baud_table[UART_BAUD_DEFAULT_IDX];
+	return g_uart_baud_table[idx];
+}
+
+/* ---------------------------------------------------------------------------
  * 引脚编号 ↔ ch32fun 引脚宏
  *   0..15  → PA0..PA15
  *   16..39 → PB0..PB23
@@ -103,6 +124,17 @@ int pinmux_apply(int pin)
 
 	case PIN_FUNC_UART_TX:
 		funPinMode(p, GPIO_ModeOut_PP_5mA);
+		/* TX 引脚负责初始化整个 UART（波特率/校验/停止位）
+		 * param2 编码：bit0=模式, bit1-2=校验, bit3=停止位 */
+		{
+			uart_cfg_t uc;
+			uc.uart      = c->param1;                       /* UART 号 */
+			uc.baud      = uart_baud_value(c->arg1);        /* 波特率档位 */
+			uc.data_bits = 8;
+			uc.parity    = (uint8_t)((c->param2 >> 1) & 0x03);     /* bit1-2 校验 */
+			uc.stop_bits = (uint8_t)((c->param2 >> 3) & 0x01) + 1; /* bit3 停止位 */
+			periph_uart_init(&uc);
+		}
 		break;
 
 	case PIN_FUNC_UART_RX:

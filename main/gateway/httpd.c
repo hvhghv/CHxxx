@@ -273,7 +273,8 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 		return;
 	}
 
-	/* 引脚复用列表：每行 `<pin> <func> <p1> <p2> <arg1>`（流式发送） */
+	/* 引脚复用列表：每行 `<pin> <func> <p1> <p2> <arg1>`（流式发送）
+	 * UART 引脚 func 带实例号（UARTn_TX/UARTn_RX），p1 输出实例号 */
 	if (strncmp(req, "GET /api/pins", 13) == 0) {
 		tcp_write(pcb, http_200, (u16_t)strlen(http_200), TCP_WRITE_FLAG_COPY);
 		char line[48];
@@ -281,13 +282,23 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			uint32_t off = 0;
 			off = s_cat(line, off, sizeof(line), pinmux_pin_name(i));
 			off = s_cat(line, off, sizeof(line), " ");
-			off = s_cat(line, off, sizeof(line), pinmux_func_name(g_pin_cfg[i].func));
+			/* UART：func 名带实例号 */
+			if (g_pin_cfg[i].func == PIN_FUNC_UART_TX || g_pin_cfg[i].func == PIN_FUNC_UART_RX) {
+				off = s_cat(line, off, sizeof(line), "UART");
+				off = s_int(line, off, sizeof(line), g_pin_cfg[i].param1);
+				off = s_cat(line, off, sizeof(line),
+					g_pin_cfg[i].func == PIN_FUNC_UART_TX ? "_TX" : "_RX");
+			} else {
+				off = s_cat(line, off, sizeof(line), pinmux_func_name(g_pin_cfg[i].func));
+			}
 			off = s_cat(line, off, sizeof(line), " ");
 			off = s_int(line, off, sizeof(line), g_pin_cfg[i].param1);
 			off = s_cat(line, off, sizeof(line), " ");
 			off = s_int(line, off, sizeof(line), g_pin_cfg[i].param2);
 			off = s_cat(line, off, sizeof(line), " ");
 			off = s_int(line, off, sizeof(line), g_pin_cfg[i].arg1);
+			off = s_cat(line, off, sizeof(line), " ");
+			off = s_int(line, off, sizeof(line), g_pin_cfg[i].flags & 0x03);   /* bind */
 			off = s_cat(line, off, sizeof(line), "\r\n");
 			tcp_write(pcb, line, (u16_t)off, TCP_WRITE_FLAG_COPY);
 		}
@@ -305,14 +316,25 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			http_send(pcb, http_200, "ERR bad args\r\n");
 			return;
 		}
-		/* 解析 func 名 → 枚举 */
-		static const char *names[] = { "NONE","GPIO_IN","GPIO_OUT","UART_TX",
-			"UART_RX","PWM","ADC","SPI","I2C","SWIO" };
+		/* 解析 func 名 → 枚举。
+		 * 支持带实例号的 UARTn_TX / UARTn_RX（n=0..3），实例号存入 param1。
+		 * 其余为无实例名：NONE/GPIO_IN/GPIO_OUT/PWM/ADC/SPI/I2C/SWIO */
 		int func = -1;
-		for (int i = 0; i < 10; i++) {
-			size_t n = strlen(names[i]);
-			if (strncmp(fs, names[i], n) == 0 && (fs[n] == '\0' || fs[n] == ' ' || fs[n] == '&')) {
-				func = i; break;
+		int inst = 0;   /* UART 实例号 */
+		if (strncmp(fs, "UART", 4) == 0 && fs[4] >= '0' && fs[4] <= '3') {
+			inst = fs[4] - '0';
+			if (strncmp(fs + 5, "_TX", 3) == 0) func = PIN_FUNC_UART_TX;
+			else if (strncmp(fs + 5, "_RX", 3) == 0) func = PIN_FUNC_UART_RX;
+		} else {
+			static const char *names[] = { "NONE","GPIO_IN","GPIO_OUT","PWM",
+				"ADC","SPI","I2C","SWIO" };
+			static const int vals[] = { PIN_FUNC_NONE, PIN_FUNC_GPIO_IN, PIN_FUNC_GPIO_OUT,
+				PIN_FUNC_PWM, PIN_FUNC_ADC, PIN_FUNC_SPI, PIN_FUNC_I2C, PIN_FUNC_SWIO };
+			for (int i = 0; i < 8; i++) {
+				size_t n = strlen(names[i]);
+				if (strncmp(fs, names[i], n) == 0 && (fs[n] == '\0' || fs[n] == ' ' || fs[n] == '&')) {
+					func = vals[i]; break;
+				}
 			}
 		}
 		if (func < 0) {
@@ -320,9 +342,18 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			return;
 		}
 		pinmux_set_func(pin, func);
-		g_pin_cfg[pin].param1 = (uint8_t)query_int(req, "p1", 0);
+		/* UART 引脚：param1 自动填实例号；其余引脚 param1 由 p1 指定 */
+		if (func == PIN_FUNC_UART_TX || func == PIN_FUNC_UART_RX)
+			g_pin_cfg[pin].param1 = (uint8_t)inst;
+		else
+			g_pin_cfg[pin].param1 = (uint8_t)query_int(req, "p1", 0);
 		g_pin_cfg[pin].param2 = (uint8_t)query_int(req, "p2", 0);
 		g_pin_cfg[pin].arg1   = (uint8_t)query_int(req, "arg", 0);
+		/* bind：CDC 动态绑定号（0=自动/固定，1..N=CDC-B/C/D），存 flags bit0-1 */
+		{
+			const char *bs = query_str(req, "bind");
+			if (bs) g_pin_cfg[pin].flags = (uint8_t)(query_int(req, "bind", 0) & 0x03);
+		}
 		pinmux_apply(pin);
 		int sr = settings_save();
 		CAT("set ");

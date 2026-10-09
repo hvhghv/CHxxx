@@ -55,38 +55,73 @@ void sys_nosys_tick(void);
 /* ===========================================================================
  * 端点定义
  * =========================================================================== */
-#define EP_A       1    /* CDC-A 数据（BDIR） */
-#define EP_B       2    /* CDC-B 数据（BDIR） */
-#define EP_C       3    /* CDC-C 数据（BDIR） */
-#define EP_RNDIS_OUT  5 /* RNDIS 数据接收 */
+#define EP_A       1    /* CDC-A 数据（BDIR）终端 */
+#define EP_B       2    /* CDC-B 数据（BDIR）UART 转发 0 */
+#define EP_C       3    /* CDC-C 数据（BDIR）UART 转发 1 */
+#if GW_CDC_COUNT >= 4
+#define EP_D       5    /* CDC-D 数据（BDIR）UART 转发 2 */
+#endif
+#define EP_RNDIS_OUT  7 /* RNDIS 数据接收 */
 #define EP_RNDIS_IN   6 /* RNDIS 数据发送 */
-#define EP_RNDIS_NOTIFY 7
 
 /* ===========================================================================
  * 环形缓冲（单生产者单消费者）
+ * 终端口（A）用大缓冲；转发口（B/C/D）用小缓冲省 RAM。
  * =========================================================================== */
-#define RB_SIZE 128
+#define RB_SIZE   128   /* 终端口接收缓冲 */
+#define RB_SIZE_F  64   /* 转发口接收缓冲 */
+#define TX_SIZE   256   /* 终端口发送缓冲 */
+#define TX_SIZE_F  96   /* 转发口发送缓冲 */
 
+/* 通用环形缓冲（size = 有效容量，字段布局一致便于统一操作） */
 typedef struct {
 	volatile uint8_t  buf[RB_SIZE];
 	volatile uint32_t head;
 	volatile uint32_t tail;
+	uint32_t          size;
 } ringbuf_t;
 
 typedef struct {
-	volatile uint8_t  buf[256];
+	volatile uint8_t  buf[TX_SIZE];
 	volatile uint32_t head;
 	volatile uint32_t tail;
+	uint32_t          size;
 } txbuf_t;
 
-static ringbuf_t rb_a, rb_c;
-static txbuf_t   tx_a, tx_c;
+/* 转发口缓冲（小容量，复用同一操作函数） */
+typedef struct {
+	volatile uint8_t  buf[RB_SIZE_F];
+	volatile uint32_t head;
+	volatile uint32_t tail;
+	uint32_t          size;
+} ringbuf_f_t;
 
-static void rb_push(ringbuf_t *rb, const uint8_t *data, uint32_t len)
+typedef struct {
+	volatile uint8_t  buf[TX_SIZE_F];
+	volatile uint32_t head;
+	volatile uint32_t tail;
+	uint32_t          size;
+} txbuf_f_t;
+
+/* CDC-A 终端：rb_a/tx_a；CDC-B/C/D 转发：数组 rb_f[]/tx_f[]（索引 = UART 号）
+ * 固定映射：UART0→[0](CDC-B), UART1→[1](CDC-C), UART2→[2](CDC-D)
+ * 数组方式省去 switch 分支，最省 Flash。 */
+static ringbuf_t   rb_a = { .size = RB_SIZE };
+static txbuf_t     tx_a = { .size = TX_SIZE };
+#define GW_FWD_MAX (GW_CDC_COUNT - 1)   /* 转发口数量：CH591=2, CH592=3 */
+static ringbuf_f_t rb_f[GW_FWD_MAX] = {
+	{ .size = RB_SIZE_F }, { .size = RB_SIZE_F }, { .size = RB_SIZE_F }
+};
+static txbuf_f_t   tx_f[GW_FWD_MAX] = {
+	{ .size = TX_SIZE_F }, { .size = TX_SIZE_F }, { .size = TX_SIZE_F }
+};
+
+static void rb_push(void *rbv, const uint8_t *data, uint32_t len)
 {
+	ringbuf_t *rb = (ringbuf_t *)rbv;
 	uint32_t head = rb->head, tail = rb->tail;
 	for (uint32_t i = 0; i < len; i++) {
-		uint32_t next = (head + 1) % RB_SIZE;
+		uint32_t next = (head + 1) % rb->size;
 		if (next == tail) break;
 		rb->buf[head] = data[i];
 		head = next;
@@ -94,20 +129,22 @@ static void rb_push(ringbuf_t *rb, const uint8_t *data, uint32_t len)
 	rb->head = head;
 }
 
-static int rb_pop(ringbuf_t *rb)
+static int rb_pop(void *rbv)
 {
+	ringbuf_t *rb = (ringbuf_t *)rbv;
 	uint32_t tail = rb->tail;
 	if (tail == rb->head) return -1;
 	int b = rb->buf[tail];
-	rb->tail = (tail + 1) % RB_SIZE;
+	rb->tail = (tail + 1) % rb->size;
 	return b;
 }
 
-static void tx_push(txbuf_t *t, const uint8_t *data, uint32_t len)
+static void tx_push(void *tv, const uint8_t *data, uint32_t len)
 {
+	txbuf_t *t = (txbuf_t *)tv;
 	uint32_t head = t->head, tail = t->tail;
 	for (uint32_t i = 0; i < len; i++) {
-		uint32_t next = (head + 1) % sizeof(t->buf);
+		uint32_t next = (head + 1) % t->size;
 		if (next == tail) break;
 		t->buf[head] = data[i];
 		head = next;
@@ -115,17 +152,18 @@ static void tx_push(txbuf_t *t, const uint8_t *data, uint32_t len)
 	t->head = head;
 }
 
-static uint32_t tx_flush(txbuf_t *t, int ep)
+static uint32_t tx_flush(void *tv, int ep)
 {
+	txbuf_t *t = (txbuf_t *)tv;
 	if (t->head == t->tail) return 0;
-	uint32_t n = (t->head - t->tail + sizeof(t->buf)) % sizeof(t->buf);
+	uint32_t n = (t->head - t->tail + t->size) % t->size;
 	if (n > 64) n = 64;
 
 	uint8_t tmp[64];
 	uint32_t tail = t->tail;
 	for (uint32_t i = 0; i < n; i++) {
 		tmp[i] = t->buf[tail];
-		tail = (tail + 1) % sizeof(t->buf);
+		tail = (tail + 1) % t->size;
 	}
 	if (USBFS_SendEndpointNEW(ep, tmp, (int)n, 1) == 0) {
 		t->tail = tail;
@@ -134,13 +172,13 @@ static uint32_t tx_flush(txbuf_t *t, int ep)
 	return 0;
 }
 
-static void cdc_puts(txbuf_t *t, const char *s)
+static void cdc_puts(void *t, const char *s)
 {
 	tx_push(t, (const uint8_t *)s, (uint32_t)strlen(s));
 }
 
 /* 输出无符号十进制（省 mini_snprintf） */
-static void cdc_put_u32(txbuf_t *t, uint32_t v)
+static void cdc_put_u32(void *t, uint32_t v)
 {
 	char b[11];
 	int i = 0;
@@ -150,7 +188,7 @@ static void cdc_put_u32(txbuf_t *t, uint32_t v)
 }
 
 /* 输出有符号十进制 */
-static void cdc_put_i32(txbuf_t *t, int32_t v)
+static void cdc_put_i32(void *t, int32_t v)
 {
 	if (v < 0) { cdc_puts(t, "-"); cdc_put_u32(t, (uint32_t)(-v)); }
 	else cdc_put_u32(t, (uint32_t)v);
@@ -233,7 +271,11 @@ void HandleDataOut(struct _USBState *ctx, int endp, uint8_t *data, int len)
 
 	switch (endp) {
 	case EP_A: rb_push(&rb_a, data, (uint32_t)len); break;
-	case EP_C: rb_push(&rb_c, data, (uint32_t)len); break;
+	case EP_B: rb_push(&rb_f[0], data, (uint32_t)len); break;   /* UART0 */
+	case EP_C: rb_push(&rb_f[1], data, (uint32_t)len); break;   /* UART1 */
+#if GW_CDC_COUNT >= 4
+	case EP_D: rb_push(&rb_f[2], data, (uint32_t)len); break;   /* UART2 */
+#endif
 	case EP_RNDIS_OUT: {
 		/* 多包累积：每次 USB OUT 中断送一个 64B 包 */
 		const uint8_t *frame;
@@ -278,6 +320,13 @@ static void cmd_help(void)
 		"help info net pins gpio set adc save load default frame spi\r\n"
 		"swio swiohs swiochip swioreset swioflash ble blef dhcp echo\r\n"
 		"gpio N|set N V|adc N|frame U T|spi master [d]|slave\r\n"
+#if GW_CDC_COUNT >= 4
+		"uart N [mode forward|frame|baud B|parity none|odd|even|stop 1|2"
+#if GW_CDC_DYNAMIC
+		"|bind 0..3"
+#endif
+		"]\r\n"
+#endif
 		"swio N|swiohs|swiochip|swioreset|dhcp [ip mask]|echo X\r\n"
 		"swioflash <addr> <len> (then send raw bytes)|webui [url]\r\n"
 		"ble central|peripheral|scan|scanstop|list|conn N|disc|send X\r\n");
@@ -396,6 +445,94 @@ static void cmd_spi(const char *p)
 		cdc_puts(&tx_a, "spi master [d]|slave\r\n");
 	}
 }
+
+/* uart 命令（仅 CDC>=4 的 CH592 启用，CH591 Flash 受限时省略） */
+#if GW_CDC_COUNT >= 4
+/* 查找 UART 号对应的 TX 引脚配置索引（-1 未配置） */
+static int uart_tx_idx(uint8_t uart)
+{
+	for (int i = 0; i < PIN_COUNT; i++) {
+		if (g_pin_cfg[i].func == PIN_FUNC_UART_TX && g_pin_cfg[i].param1 == uart)
+			return i;
+	}
+	return -1;
+}
+
+/* 打印 UART 配置（模式/波特率/校验/停止位） */
+static void uart_show(int idx)
+{
+	const pin_cfg_t *c = &g_pin_cfg[idx];
+	cdc_puts(&tx_a, "UART");
+	cdc_put_i32(&tx_a, c->param1);
+	cdc_puts(&tx_a, (c->param2 & 1) == PIN_UART_MODE_FRAME ? " frame" : " forward");
+	cdc_puts(&tx_a, " baud=");
+	cdc_put_u32(&tx_a, uart_baud_value(c->arg1));
+	uint8_t p = (c->param2 >> 1) & 3;
+	cdc_puts(&tx_a, p == 1 ? " odd" : p == 2 ? " even" : " none");
+	cdc_puts(&tx_a, " stop=");
+	cdc_put_i32(&tx_a, ((c->param2 >> 3) & 1) + 1);
+#if GW_CDC_DYNAMIC
+	cdc_puts(&tx_a, " bind=");
+	cdc_put_i32(&tx_a, c->flags & 0x03);
+#endif
+	cdc_puts(&tx_a, "\r\n");
+}
+
+/* uart 命令：
+ *   uart N                       查看 UART N 配置
+ *   uart N mode forward|frame    设置模式
+ *   uart N baud <值>             设置波特率（9600..921600）
+ *   uart N parity none|odd|even  设置校验
+ *   uart N stop 1|2              设置停止位
+ * 修改后自动应用并保存。 */
+static void cmd_uart(const char *arg)
+{
+	int n = atoi(arg);
+	int idx = (n >= 0 && n <= 3) ? uart_tx_idx((uint8_t)n) : -1;
+	if (idx < 0) { cdc_puts(&tx_a, "uart N [mode|baud|parity|stop] [val]\r\n"); return; }
+	/* 跳过 UART 号，取子命令 */
+	while (*arg == ' ') arg++;
+	while (*arg >= '0' && *arg <= '9') arg++;
+	while (*arg == ' ') arg++;
+	if (*arg == '\0') { uart_show(idx); return; }   /* 仅查看 */
+
+	pin_cfg_t *c = &g_pin_cfg[idx];
+	if (strncmp(arg, "mode ", 5) == 0) {
+		const char *v = arg + 5;
+		if (strncmp(v, "frame", 5) == 0) c->param2 = (c->param2 & ~1) | PIN_UART_MODE_FRAME;
+		else if (strncmp(v, "forward", 7) == 0) c->param2 &= ~1;
+		else goto usage;
+	} else if (strncmp(arg, "baud ", 5) == 0) {
+		c->arg1 = (uint8_t)uart_baud_index((uint32_t)atoi(arg + 5));
+	} else if (strncmp(arg, "parity ", 7) == 0) {
+		const char *v = arg + 7;
+		uint8_t p;
+		if (strncmp(v, "odd", 3) == 0) p = PIN_UART_PARITY_ODD;
+		else if (strncmp(v, "even", 4) == 0) p = PIN_UART_PARITY_EVEN;
+		else if (strncmp(v, "none", 4) == 0) p = PIN_UART_PARITY_NONE;
+		else goto usage;
+		c->param2 = (uint8_t)((c->param2 & ~0x06) | (p << 1));
+	} else if (strncmp(arg, "stop ", 5) == 0) {
+		int s = atoi(arg + 5);
+		if (s != 1 && s != 2) goto usage;
+		c->param2 = (uint8_t)((c->param2 & ~0x08) | ((s - 1) << 3));
+#if GW_CDC_DYNAMIC
+	} else if (strncmp(arg, "bind ", 5) == 0) {
+		int b = atoi(arg + 5);   /* 0=自动, 1..N=CDC-B/C/D */
+		if (b < 0 || b > GW_FWD_MAX) goto usage;
+		c->flags = (uint8_t)((c->flags & ~0x03) | (b & 0x03));
+#endif
+	} else {
+usage:
+		cdc_puts(&tx_a, "uart N [mode|baud|parity|stop] [val]\r\n");
+		return;
+	}
+	pinmux_apply(idx);
+	int sr = settings_save();
+	uart_show(idx);
+	cdc_puts(&tx_a, sr == 0 ? "saved\r\n" : "save fail\r\n");
+}
+#endif /* GW_CDC_COUNT >= 4 (uart 命令) */
 
 static void cmd_swio(const char *arg)
 {
@@ -670,6 +807,9 @@ static const term_cmd_t term_cmds[] = {
 	{ "adc",        1, cmd_adc },
 	{ "frame",      1, cmd_frame },
 	{ "spi",        1, cmd_spi },
+#if GW_CDC_COUNT >= 4
+	{ "uart",       1, cmd_uart },
+#endif
 	{ "swio",       1, cmd_swio },
 	{ "swiohs",     0, (void (*)(const char *))cmd_swiohs },
 	{ "swiochip",   0, (void (*)(const char *))cmd_swiochip },
@@ -765,8 +905,19 @@ static void netif_poll(void)
 	}
 }
 
-/* 帧链路轮询：读取帧模式串口的数据，喂给 framelink 解析
- * 阶段 6：UART0~UART3 中配置为帧模式（PIN_UART_MODE_FRAME）的通道 */
+/* 查找某 UART 号对应的 TX 引脚配置（用于读模式/波特率等参数）。
+ * 返回 NULL 表示该 UART 未配置。 */
+static const pin_cfg_t *uart_tx_cfg(uint8_t uart)
+{
+	for (int i = 0; i < PIN_COUNT; i++) {
+		if (g_pin_cfg[i].func == PIN_FUNC_UART_TX && g_pin_cfg[i].param1 == uart)
+			return &g_pin_cfg[i];
+	}
+	return NULL;
+}
+
+/* 帧链路轮询：仅处理配置为「帧模式」的 UART
+ * 阶段 6：UART0~UART3 中 param2 == PIN_UART_MODE_FRAME 的通道 */
 static void frame_poll(void)
 {
 	static const uint8_t uart_map[4] = { FRAMELINK_UART0, FRAMELINK_UART1,
@@ -774,6 +925,8 @@ static void frame_poll(void)
 	uint8_t buf[64];
 
 	for (uint8_t u = 0; u < 4; u++) {
+		const pin_cfg_t *c = uart_tx_cfg(u);
+		if (!c || (c->param2 & 1) != PIN_UART_MODE_FRAME) continue;   /* 仅帧模式 */
 		int n = periph_uart_read(u, buf, sizeof(buf));
 		if (n > 0) {
 			framelink_rx((framelink_ch_t)uart_map[u], buf, (uint32_t)n);
@@ -784,6 +937,62 @@ static void frame_poll(void)
 	framelink_poll_spi();
 }
 
+/* UART 号 → CDC 转发缓冲
+ *   固定模式（GW_CDC_DYNAMIC=0）：数组索引 = UART 号
+ *     CH592：UART0→CDC-B, UART1→CDC-C, UART2→CDC-D
+ *     CH591：UART0→CDC-B, UART1→CDC-C
+ *   动态模式（GW_CDC_DYNAMIC=1）：按 pin_cfg.flags 的绑定号查找（0=未绑定）
+ * 越界/未绑定返回 NULL。 */
+#if GW_CDC_DYNAMIC
+/* 绑定号（1..GW_FWD_MAX）→ 转发缓冲索引 */
+static int uart_bind_idx(uint8_t u)
+{
+	const pin_cfg_t *c = uart_tx_cfg(u);
+	if (!c) return -1;
+	uint8_t b = c->flags & 0x03;   /* bit0-1 = 绑定号 */
+	if (b == 0 || b > GW_FWD_MAX) return -1;
+	return (int)b - 1;
+}
+static void *uart_tx_tb(uint8_t u)
+{
+	int i = uart_bind_idx(u);
+	return (i >= 0) ? &tx_f[i] : NULL;
+}
+#else
+static void *uart_tx_tb(uint8_t u)
+{
+	return (u < GW_FWD_MAX) ? &tx_f[u] : NULL;
+}
+#endif
+
+/* 查找绑定到指定转发口索引（0..GW_FWD_MAX-1）的 UART 号；-1 未绑定 */
+#if GW_CDC_DYNAMIC
+static int fwd_idx_uart(uint8_t idx)
+{
+	uint8_t bind = idx + 1;   /* 绑定号 = 索引 + 1 */
+	for (uint8_t u = 0; u < 4; u++) {
+		const pin_cfg_t *c = uart_tx_cfg(u);
+		if (c && (c->flags & 0x03) == bind) return (int)u;
+	}
+	return -1;
+}
+#endif
+
+/* CDC 转发轮询：仅处理配置为「转发模式」的 UART
+ * UART → 对应 CDC；反向在 data_poll 中处理 */
+static void uart_fwd_poll(void)
+{
+	uint8_t buf[64];
+	for (uint8_t u = 0; u < 4; u++) {
+		const pin_cfg_t *c = uart_tx_cfg(u);
+		if (!c || (c->param2 & 1) != PIN_UART_MODE_FORWARD) continue;  /* 仅转发模式 */
+		void *tb = uart_tx_tb(u);
+		if (!tb) continue;   /* 该 UART 未绑定 CDC */
+		int n = periph_uart_read(u, buf, sizeof(buf));
+		if (n > 0) tx_push(tb, buf, (uint32_t)n);   /* UART → CDC */
+	}
+}
+
 static void term_poll(void)
 {
 	int ch;
@@ -792,12 +1001,24 @@ static void term_poll(void)
 	}
 }
 
+/* CDC 数据口 → UART 转发（按绑定关系） */
 static void data_poll(void)
 {
-	int ch;
-	while ((ch = rb_pop(&rb_c)) >= 0) {
-		uint8_t c = (uint8_t)ch;
-		tx_push(&tx_c, &c, 1);
+	for (uint8_t i = 0; i < GW_FWD_MAX; i++) {
+		void *rb = &rb_f[i];
+#if GW_CDC_DYNAMIC
+		int u = fwd_idx_uart(i);        /* 反查绑定的 UART */
+		if (u < 0) continue;
+#else
+		uint8_t u = i;                  /* 固定：索引即 UART 号 */
+#endif
+		const pin_cfg_t *cfg = uart_tx_cfg((uint8_t)u);
+		if (!cfg || (cfg->param2 & 1) != PIN_UART_MODE_FORWARD) continue;  /* 仅转发模式 */
+		int ch;
+		while ((ch = rb_pop(rb)) >= 0) {
+			uint8_t c = (uint8_t)ch;
+			periph_uart_write((uint8_t)u, &c, 1);
+		}
 	}
 }
 
@@ -854,7 +1075,11 @@ int main(void)
 	blemgr_init();
 
 	cdc_puts(&tx_a, "\r\nCH591 Gateway (nosys)\r\n");
-	cdc_puts(&tx_a, "Port A: terminal | C: data | RNDIS: net\r\n");
+#if GW_CDC_COUNT >= 4
+	cdc_puts(&tx_a, "Port A: terminal | B/C/D: UART0/1/2 | RNDIS: net\r\n");
+#else
+	cdc_puts(&tx_a, "Port A: terminal | B/C: UART0/1 | RNDIS: net\r\n");
+#endif
 	cdc_puts(&tx_a, "Type 'help' for commands.\r\n> ");
 
 	/* 主循环 */
@@ -863,10 +1088,17 @@ int main(void)
 		sys_check_timeouts();    /* LWIP 超时 */
 		netif_poll();            /* RNDIS 接收注入 */
 		frame_poll();            /* 帧链路轮询（串口）*/
+		uart_fwd_poll();         /* CDC 转发轮询（串口→CDC）*/
 		tx_flush(&tx_a, EP_A);   /* flush 发送队列 */
-		tx_flush(&tx_c, EP_C);
+		/* 转发口 flush：端点号数组（索引 = UART 号） */
+		static const uint8_t fwd_ep[GW_FWD_MAX] = { EP_B, EP_C
+#if GW_CDC_COUNT >= 4
+			, EP_D
+#endif
+		};
+		for (uint8_t i = 0; i < GW_FWD_MAX; i++) tx_flush(&tx_f[i], fwd_ep[i]);
 		term_poll();             /* 终端命令 */
-		data_poll();             /* 数据回环 */
+		data_poll();             /* CDC → UART 转发 */
 		bleapp_process();        /* BLE TMOS 事件 */
 		blemgr_poll();           /* BLE 帧管理（ACK 超时） */
 		httpd_poll();            /* HTTP 空闲连接超时 */

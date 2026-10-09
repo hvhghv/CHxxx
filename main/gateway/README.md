@@ -1,6 +1,6 @@
 # CH591/CH592 多功能网关
 
-裸机（无 FreeRTOS）多功能网关固件，集成 **USB（3×CDC + RNDIS）**、**LWIP 网络**、
+裸机（无 FreeRTOS）多功能网关固件，集成 **USB（4×CDC + RNDIS）**、**LWIP 网络**、
 **HTTP 服务器 + Web UI**、**BLE（动态 GATT）**、**DHCP 服务器**、**帧协议**、
 **引脚复用**、**SWIO 烧录** 于一体。
 
@@ -12,7 +12,7 @@
 
 | 功能 | 说明 |
 |---|---|
-| **USB 复合设备** | 3×CDC-ACM（终端/调试/数据）+ 1×RNDIS（虚拟网卡） |
+| **USB 复合设备** | 4×CDC-ACM（终端 + 3×UART 转发）+ 1×RNDIS（虚拟网卡） |
 | **LWIP 网络** | NO_SYS=1 raw API，静态 IP `192.168.7.1/24` |
 | **DHCP 服务器** | RNDIS 主机自动获取 IP（可配置，**不派发网关**） |
 | **HTTP 服务器** | REST API + 内嵌单页 Web UI（约 3.5KB） |
@@ -29,7 +29,7 @@
 ```
 main/gateway/
 ├── gateway.c          主程序（USB 回调 + 主循环 + 终端命令）
-├── usb_config.h       USB 描述符（3×CDC + RNDIS）
+├── usb_config.h       USB 描述符（4×CDC + RNDIS）
 ├── funconfig.h        芯片配置（60MHz PLL）
 ├── pinmux.c/h         引脚复用管理
 ├── config.c/h         Flash 配置存储（magic + CRC32）
@@ -75,8 +75,8 @@ cmake --build build --target gateway
 
 | 芯片 | FLASH | RAM | BLE 模式 |
 |---|---|---|---|
-| **CH592** | 221096 B / 448 KB (48.20%) | 26016 B / 26 KB (97.72%) | dual（双模式） |
-| **CH591** | 193720 B / 192 KB (98.53%) | 25648 B / 26 KB (96.33%) | perf（仅从机） |
+| **CH592** | 226920 B / 448 KB (49.46%) | 26016 B / 26 KB (97.72%) | dual（双模式） |
+| **CH591** | 195576 B / 192 KB (99.48%) | 25472 B / 26 KB (95.67%) | perf（仅从机） |
 
 ### 构建选项
 
@@ -85,8 +85,9 @@ cmake --build build --target gateway
 | `CHIP_SDK` | CH572 | 目标芯片（CH591/CH592） |
 | `BLE_ROLE` | dual | BLE 角色：`perf`（仅从机）/`cent`（仅主机）/`dual`（双模式） |
 | `BLE_UUID128` | OFF | 支持 128bit UUID（开启后帧负载上限 128，关闭时 48，省 RAM） |
+| `GW_CDC_COUNT` | 4 | CDC-ACM 数量：**3**（终端+2 UART，CH591）/ **4**（终端+3 UART，CH592） |
 
-> CH591 会自动将 `BLE_ROLE` 从 `dual` 降为 `perf`（Flash 限制）。
+> CH591 会自动将 `BLE_ROLE` 从 `dual` 降为 `perf`、`GW_CDC_COUNT` 从 4 降为 3（资源限制）。
 
 ---
 
@@ -94,8 +95,11 @@ cmake --build build --target gateway
 
 1. **烧录**固件到 CH592/CH591
 2. 用 USB 连接电脑，出现：
-   - 3 个串口（CDC-A/B/C）
+   - **CH592**：4 个串口（CDC-A 终端 / CDC-B/C/D = UART0/1/2 转发）
+   - **CH591**：3 个串口（CDC-A 终端 / CDC-B/C = UART0/1 转发）
    - 1 个网卡（RNDIS）
+
+> CDC ↔ UART 为**固定映射**（无动态绑定）：CDC-B→UART0、CDC-C→UART1、CDC-D→UART2（仅 CH592）。
 3. 打开串口 A（115200），输入 `help` 查看命令
 4. 浏览器访问 **`http://192.168.7.1/`** 使用 Web UI
 
@@ -116,6 +120,7 @@ cmake --build build --target gateway
 | `default` | 恢复默认配置 |
 | `frame U T` | 在 UART U 发送 type T 的测试帧 |
 | `spi master [div]` / `spi slave` | 配置 SPI 主/从模式 |
+| `uart N [mode forward\|frame\|baud B\|parity none\|odd\|even\|stop 1\|2]` | 查看/配置 UART N（**仅 CH592**，CH591 Flash 受限时省略） |
 | `swio N` | 设置 SWIO 烧录引脚 |
 | `swiohs` | SWIO 握手（读 DMCFGR） |
 | `swiochip` | SWIO 读目标芯片 ID |
