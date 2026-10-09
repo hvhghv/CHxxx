@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset=utf-8>
+<meta name=viewport content='width=device-width,initial-scale=1'>
+<title>CH59x Gateway</title>
+<style>
+body{font:14px/1.5 system-ui,sans-serif;margin:0;background:linear-gradient(160deg,#0f172a,#1e1b4b);color:#e2e8f0;min-height:100vh}
+header{display:flex;align-items:center;gap:10px;padding:14px 20px;background:#0f172ad9;border-bottom:1px solid #334155}
+header h1{font-size:16px;margin:0}
+header .sp{flex:1}
+header .tag{font-size:11px;color:#94a3b8}
+header input{width:140px}
+.w{padding:16px;display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));max-width:1600px;margin:0 auto}
+.c{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;box-shadow:0 4px 16px #00000040}
+.c h2{font-size:13px;margin:0 0 12px;color:#38bdf8;text-transform:uppercase;letter-spacing:.8px}
+.r{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.r label{font-size:12px;color:#94a3b8}
+button{background:#0ea5e9;color:#fff;border:0;padding:7px 13px;border-radius:7px;cursor:pointer;font-size:13px}
+button:hover{background:#38bdf8}
+input{background:#0f172a;color:#e2e8f0;border:1px solid #334155;padding:7px 9px;border-radius:7px;width:80px;font-size:13px}
+input:focus{outline:0;border-color:#38bdf8}
+input[type=file]{width:auto;padding:5px;font-size:12px;color:#94a3b8}
+pre{background:#0b1120;border:1px solid #334155;padding:10px;border-radius:8px;overflow:auto;font:12px/1.45 ui-monospace,Consolas,monospace;margin:8px 0 0;white-space:pre-wrap;min-height:20px;color:#7dd3fc}
+</style>
+<header><h1>CH59x Gateway</h1><span class=sp></span>
+<input id=host title="设备地址" value="http://192.168.7.1">
+<button onclick="S('info','/api/info')">连接</button>
+<span class=tag id=tag>connecting…</span></header>
+<div class=w id=w></div>
+<script>
+const $=id=>document.getElementById(id);
+const V=id=>$(id).value;
+// 设备基地址：优先 URL 参数 ?host=，其次 localStorage，最后默认
+const H=()=>{
+  const q=new URLSearchParams(location.search).get('host');
+  if(q){localStorage.setItem('gw_host',q);return q.replace(/\/$/,'')}
+  return (localStorage.getItem('gw_host')||$('host').value).replace(/\/$/,'')
+};
+const S=(id,u,m)=>fetch(H()+u,m?{method:m}:0).then(r=>r.text()).then(t=>{$(id).textContent=t;$('tag').textContent='online'}).catch(e=>{$(id).textContent='ERR: '+e;$('tag').textContent='offline'});
+const C=[
+['Info','info',0,[['info','/api/info','Refresh']]],
+['GPIO','gr',[['Pin','gp',0]],[['gr','/api/gpio?pin=$gp','Read'],['gr','/api/gpio?pin=$gp&val=1','Set 1',1],['gr','/api/gpio?pin=$gp&val=0','Set 0',1]]],
+['ADC','ar',[['Ch','ac',0]],[['ar','/api/adc?ch=$ac','Read']]],
+['Config','cr',0,[['cr','/api/save','Save',1],['cr','/api/load','Load',1]]],
+['Pins','pr',0,[['pr','/api/pins','List']]],
+['Routes','rr',[['Dest','rd',0],['Mask','rm',0],['Ch','rc',0]],[['rr','/api/route/add?dest=$rd&mask=$rm&ch=$rc','Add',1],['rr','/api/route/del?dest=$rd&mask=$rm','Del',1],['rr','/api/routes','List']]],
+['BLE','br',0,[['br','/api/ble','Status']]],
+['DHCP','hr',[['IP','di','192.168.7.2'],['Mask','dm','255.255.255.0']],[['hr','/api/dhcp?ip=$di&mask=$dm','Set',1],['hr','/api/dhcp','Status']]],
+['SWIO','sr',[['Pin','sp',0]],[['sr','/api/swio?pin=$sp','Set Pin',1],['sr','/api/swio/handshake','Handshake'],['sr','/api/swio','Progress']]]
+];
+let h='';
+for(const[t,o,inp,btns]of C){
+  h+='<div class=c><h2>'+t+'</h2>';
+  if(inp){h+='<div class=r>';
+    for(const[x,id,v]of inp)h+='<label>'+x+'</label><input id='+id+' value='+v+'>';
+    h+='</div>';}
+  for(const[od,u,l,p]of btns){
+    const q=u.replace(/\$(\w+)/g,"'+V('$1')+'");
+    h+='<button onclick=S(\''+od+'\',\''+q+'\''+(p?',\'POST\'':'')+')>'+l+'</button>';}
+  h+='<pre id='+o+'>-</pre></div>';}
+$('w').innerHTML=h;
+$('sr').insertAdjacentHTML('beforebegin','<div class=r><label>Addr</label><input id=sa value=0x08000000><input type=file id=sf accept=.bin><button onclick=UF()>Flash</button></div>');
+const UF=()=>{const f=$('sf').files[0];if(!f){$('sr').textContent='no file';return}
+$('sr').textContent='uploading '+f.size+' B...';
+fetch(H()+'/api/swio/flash?addr='+V('sa'),{method:'POST',body:f})
+.then(r=>r.text()).then(t=>{$('sr').textContent=t;return S('sr','/api/swio')})
+.catch(e=>$('sr').textContent='ERR:'+e)};
+$('host').value=H();
+S('info','/api/info');
+</script>

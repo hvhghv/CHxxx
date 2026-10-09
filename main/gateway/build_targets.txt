@@ -1,0 +1,5 @@
+# gateway 构建目标（键值对格式）
+# 每行 `chip = <芯片>`，CI 会为每个芯片构建一次。
+# 说明：gateway 只支持 CH592 / CH591（BLE + USB + LWIP）。
+chip = CH592
+chip = CH591

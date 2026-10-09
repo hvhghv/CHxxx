@@ -1,0 +1,102 @@
+name: Release
+
+# 推 tag（v*）时编译所有默认目标，发布到 GitHub Release。
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ---- 生成构建矩阵 ----
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.gen.outputs.include }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gen
+        run: |
+          echo "include=$(bash scripts/gen_matrix.sh)" >> "$GITHUB_OUTPUT"
+
+  # ---- 矩阵构建 ----
+  build:
+    needs: matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.include) }}
+    name: ${{ matrix.project }} / ${{ matrix.chip }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache RISC-V toolchain
+        id: tc-cache
+        uses: actions/cache@v4
+        with:
+          path: sdk/common/prebuilt/xpack-riscv-none-elf-gcc-15.2.0-1
+          key: xpack-riscv-none-elf-gcc-15.2.0-1-linux-x64
+
+      - name: Download RISC-V toolchain
+        if: steps.tc-cache.outputs.cache-hit != 'true'
+        run: |
+          VERSION=15.2.0-1
+          PKG=xpack-riscv-none-elf-gcc-$VERSION
+          URL=https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v$VERSION
+          mkdir -p sdk/common/prebuilt
+          curl -L --fail -o /tmp/$PKG.tar.gz $URL/$PKG-linux-x64.tar.gz
+          tar xzf /tmp/$PKG.tar.gz -C sdk/common/prebuilt
+          rm /tmp/$PKG.tar.gz
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_MAKE_PROGRAM=ninja \
+            -DCMAKE_TOOLCHAIN_FILE=sdk/common/cmake/riscv.cmake \
+            -DCHIP_SDK=${{ matrix.chip }}
+
+      - name: Build
+        run: cmake --build build --target ${{ matrix.target }}
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          for ext in bin hex elf; do
+            f=build/main/${{ matrix.target }}/${{ matrix.target }}.$ext
+            [ -f "$f" ] && cp "$f" out/${{ matrix.target }}-${{ matrix.chip }}.$ext
+          done
+          ls -la out/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-${{ matrix.chip }}
+          path: out/
+          if-no-files-found: error
+
+  # ---- 发布 Release ----
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -la artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
