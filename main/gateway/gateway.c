@@ -21,7 +21,6 @@
 
 #include "ch32fun.h"
 #include "fsusb.h"
-#include <stdio.h>
 #include <string.h>
 
 /* 引脚复用 + 配置存储 */
@@ -277,10 +276,11 @@ static void cmd_help(void)
 {
 	cdc_puts(&tx_a,
 		"help info net pins gpio set adc save load default frame spi\r\n"
-		"swio swiohs swiochip swioreset ble blef dhcp echo\r\n"
+		"swio swiohs swiochip swioreset swioflash ble blef dhcp echo\r\n"
 		"gpio N|set N V|adc N|frame U T|spi master [d]|slave\r\n"
 		"swio N|swiohs|swiochip|swioreset|dhcp [ip mask]|echo X\r\n"
-		"webui [url]|ble central|peripheral|scan|scanstop|list|conn N|disc|send X\r\n");
+		"swioflash <addr> <len> (then send raw bytes)|webui [url]\r\n"
+		"ble central|peripheral|scan|scanstop|list|conn N|disc|send X\r\n");
 }
 
 static void cmd_info(void)
@@ -441,6 +441,48 @@ static void cmd_swioreset(void)
 {
 	swio_reset_target();
 	cdc_puts(&tx_a, "swio reset\r\n");
+}
+
+/* ---------------------------------------------------------------------------
+ * SWIO 流式烧录（终端口二进制接收模式）
+ * 用法：swioflash <addr> <len>  然后紧跟 len 字节原始固件数据
+ * 例：  swioflash 0x08000000 12345   （随后发送 12345 字节）
+ * ------------------------------------------------------------------------- */
+static uint32_t flash_remaining = 0;   /* 剩余待收字节 */
+static uint32_t flash_addr = 0;
+
+static void cmd_swioflash(const char *arg)
+{
+	/* 解析 addr len */
+	while (*arg == ' ') arg++;
+	uint32_t addr = 0;
+	if (arg[0] == '0' && (arg[1] == 'x' || arg[1] == 'X')) {
+		arg += 2;
+		while ((*arg >= '0' && *arg <= '9') || (*arg >= 'a' && *arg <= 'f') || (*arg >= 'A' && *arg <= 'F')) {
+			uint8_t d = (uint8_t)(*arg <= '9' ? *arg - '0' : (*arg | 0x20) - 'a' + 10);
+			addr = (addr << 4) | d; arg++;
+		}
+	} else {
+		while (*arg >= '0' && *arg <= '9') { addr = addr * 10 + (uint32_t)(*arg - '0'); arg++; }
+	}
+	while (*arg == ' ') arg++;
+	uint32_t len = 0;
+	while (*arg >= '0' && *arg <= '9') { len = len * 10 + (uint32_t)(*arg - '0'); arg++; }
+
+	if (!len) { cdc_puts(&tx_a, "usage: swioflash <addr> <len>\r\n"); return; }
+
+	int r = swio_stream_begin(addr, len);
+	if (r != SWIO_OK) {
+		cdc_puts(&tx_a, "flash begin fail r=");
+		cdc_put_i32(&tx_a, r);
+		cdc_puts(&tx_a, "\r\n");
+		return;
+	}
+	flash_addr = addr;
+	flash_remaining = len;
+	cdc_puts(&tx_a, "ready ");   /* 提示：随后发送二进制数据 */
+	cdc_put_u32(&tx_a, len);
+	cdc_puts(&tx_a, "\r\n");
 }
 
 static void cmd_echo(const char *arg)
@@ -632,6 +674,7 @@ static const term_cmd_t term_cmds[] = {
 	{ "swiohs",     0, (void (*)(const char *))cmd_swiohs },
 	{ "swiochip",   0, (void (*)(const char *))cmd_swiochip },
 	{ "swioreset",  0, (void (*)(const char *))cmd_swioreset },
+	{ "swioflash",  1, cmd_swioflash },
 	{ "echo",       1, cmd_echo },
 	{ "ble",        1, cmd_ble },
 	{ "blef",       1, cmd_blef },
@@ -665,6 +708,26 @@ static void term_run(const char *line)
 
 static void term_handle_char(int ch)
 {
+	/* 二进制烧录模式：所有字节直接喂给 SWIO 流 */
+	if (flash_remaining > 0) {
+		uint8_t b = (uint8_t)ch;
+		int r = swio_stream_data(&b, 1);
+		if (r != SWIO_OK) {
+			swio_stream_end();
+			flash_remaining = 0;
+			cdc_puts(&tx_a, "\r\nflash data fail r=");
+			cdc_put_i32(&tx_a, r);
+			cdc_puts(&tx_a, "\r\n> ");
+			return;
+		}
+		if (--flash_remaining == 0) {
+			/* 收满 → 收尾 */
+			int r2 = swio_stream_end();
+			cdc_puts(&tx_a, r2 == SWIO_OK ? "\r\nflash OK\r\n> " : "\r\nflash end fail\r\n> ");
+		}
+		return;
+	}
+
 	if (ch == '\r' || ch == '\n') {
 		term_line[term_pos] = '\0';
 		cdc_puts(&tx_a, "\r\n");
@@ -746,8 +809,6 @@ int main(void)
 	SystemInit();
 	USBFSSetup();
 	Delay_Ms(500);
-
-	printf("CH591 Gateway (nosys) start.\r\n");
 
 	/* 引脚复用：加载配置并应用 */
 	pinmux_init();

@@ -120,6 +120,7 @@ cmake --build build --target gateway
 | `swiohs` | SWIO 握手（读 DMCFGR） |
 | `swiochip` | SWIO 读目标芯片 ID |
 | `swioreset` | SWIO 复位目标芯片 |
+| `swioflash <addr> <len>` | SWIO 流式烧录：执行后终端口进入二进制接收模式，随后发送 `len` 字节固件数据（addr 支持 `0x` 十六进制或十进制） |
 | `ble [central\|peripheral\|scan\|list\|conn N\|disc\|send X]` | BLE 控制 |
 | `blef reg` | 测试注册 BLE 服务 |
 | `dhcp [ip mask]` | 查看/设置 DHCP 派发 IP 与掩码 |

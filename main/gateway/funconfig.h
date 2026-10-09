@@ -14,8 +14,8 @@
 /* CH59x 无 RCC 外设，必须关闭时钟安全系统 */
 #define FUNCONF_USE_CLK_SEC       0
 
-/* printf 走调试口（SWIO）；USB 输出由各端点单独处理 */
-#define FUNCONF_USE_DEBUGPRINTF   1
+/* printf 未使用（输出走 USB CDC / HTTP），关闭以省 Flash */
+#define FUNCONF_USE_DEBUGPRINTF   0
 #define FUNCONF_USE_UARTPRINTF    0
 
 #endif

@@ -68,7 +68,7 @@ typedef enum {
 	FRAME_TYPE_PWM_STOP   = 0x32,   /* 停止 PWM */
 	FRAME_TYPE_UART_CFG   = 0x40,   /* 配置串口 */
 	FRAME_TYPE_NET_FWD    = 0x50,   /* 网络帧转发 */
-	FRAME_TYPE_BLE_CFG    = 0x60,   /* 蓝牙配置 */
+	/* 0x60~0x7F 保留给 BLE 命令/事件，定义见 ble_proto.h（BLE_CMD_* / BLE_EVT_*） */
 	FRAME_TYPE_RESP       = 0x80,   /* 响应（type | 0x80） */
 	FRAME_TYPE_ERR        = 0xFF,   /* 错误 */
 } frame_type_t;

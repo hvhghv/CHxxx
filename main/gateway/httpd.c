@@ -28,7 +28,6 @@
 #include "settings.h"
 #include "webui.h"
 #include <string.h>
-#include <stdio.h>
 
 /* ---------------------------------------------------------------------------
  * 连接状态
@@ -124,12 +123,43 @@ static uint32_t s_hex8(char *buf, uint32_t off, uint32_t max, uint32_t v)
 	return off;
 }
 
+/* 发送 settings_save 结果后缀：" (saved)\r\n" / " (save failed)\r\n" */
+static void http_send_save_tail(struct tcp_pcb *pcb, char *body, uint32_t off, int sr)
+{
+	off = s_cat(body, off, 256, sr == 0 ? " (saved)\r\n" : " (save failed)\r\n");
+	(void)off;
+	http_send(pcb, http_200, body);
+}
+
+/* 发送 SWIO 烧录结果响应："OK flashed\r\n" / "ERR flash r=N\r\n" */
+static void http_send_flash_result(struct tcp_pcb *pcb, int r)
+{
+	char resp[64];
+	uint32_t o = 0;
+	o = s_cat(resp, o, sizeof(resp), r == SWIO_OK ? "OK flashed" : "ERR flash r=");
+	if (r != SWIO_OK) o = s_int(resp, o, sizeof(resp), r);
+	o = s_cat(resp, o, sizeof(resp), "\r\n");
+	http_send(pcb, http_200, resp);
+}
+
 /* ---------------------------------------------------------------------------
  * 请求解析辅助：提取 query 参数（如 pin=5）
  * ------------------------------------------------------------------------- */
+/* 简单子串搜索（替代库 strstr，省 ~846B 的 twoway 算法） */
+static const char *s_find(const char *hay, const char *needle)
+{
+	if (!*needle) return hay;
+	for (; *hay; hay++) {
+		const char *h = hay, *n = needle;
+		while (*n && *h == *n) { h++; n++; }
+		if (!*n) return hay;
+	}
+	return NULL;
+}
+
 static int query_int(const char *req, const char *key, int def)
 {
-	const char *p = strstr(req, key);
+	const char *p = s_find(req, key);
 	if (!p) return def;
 	p += strlen(key);
 	if (*p == '=') p++;
@@ -153,7 +183,7 @@ static uint32_t parse_ip(const char *s)
 /* 提取 query 参数值（返回指向值的指针，或 NULL） */
 static const char *query_str(const char *req, const char *key)
 {
-	const char *p = strstr(req, key);
+	const char *p = s_find(req, key);
 	if (!p) return NULL;
 	p += strlen(key);
 	if (*p == '=') p++;
@@ -163,8 +193,8 @@ static const char *query_str(const char *req, const char *key)
 /* 解析 Content-Length 头（返回字节数，未找到返回 0） */
 static uint32_t parse_content_length(const char *req)
 {
-	const char *p = strstr(req, "Content-Length:");
-	if (!p) p = strstr(req, "content-length:");
+	const char *p = s_find(req, "Content-Length:");
+	if (!p) p = s_find(req, "content-length:");
 	if (!p) return 0;
 	p += 15;
 	while (*p == ' ' || *p == '\t') p++;
@@ -299,8 +329,7 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 		CAT(pinmux_pin_name(pin));
 		CAT("=");
 		CAT(pinmux_func_name(g_pin_cfg[pin].func));
-		CAT(sr == 0 ? " (saved)\r\n" : " (save failed)\r\n");
-		http_send(pcb, http_200, body);
+		http_send_save_tail(pcb, body, off, sr);
 		return;
 	}
 
@@ -308,7 +337,7 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 	if (strncmp(req, "GET /api/gpio", 13) == 0 ||
 	    strncmp(req, "POST /api/gpio", 14) == 0) {
 		int pin = query_int(req, "pin", -1);
-		const char *pv = strstr(req, "val=");
+		const char *pv = s_find(req, "val=");
 		uint32_t off = 0;
 		if (pv) {
 			int val = atoi(pv + 4);
@@ -476,8 +505,7 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 		CATX(nip);
 		CAT(" mask=");
 		CATX(nm);
-		CAT(sr == 0 ? " (saved)\r\n" : " (save failed)\r\n");
-		http_send(pcb, http_200, body);
+		http_send_save_tail(pcb, body, off, sr);
 		return;
 	}
 
@@ -525,8 +553,7 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			uint32_t off = 0;
 			CAT("set url=");
 			CAT(g_cfg.webui_url);
-			CAT(sr == 0 ? " (saved)\r\n" : " (save failed)\r\n");
-			http_send(pcb, http_200, body);
+			http_send_save_tail(pcb, body, off, sr);
 			return;
 		}
 		http_send(pcb, http_200, "ERR no url\r\n");
@@ -599,12 +626,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		if (conn.up_recvd >= conn.up_total) {
 			/* 上传完成 → 收尾 */
 			int r = swio_stream_end();
-			uint32_t o = 0;
-			char resp[96];
-			o = s_cat(resp, o, sizeof(resp), r == SWIO_OK ? "OK flashed " : "ERR flash r=");
-			if (r != SWIO_OK) o = s_int(resp, o, sizeof(resp), r);
-			o = s_cat(resp, o, sizeof(resp), "\r\n");
-			http_send(pcb, http_200, resp);
+			http_send_flash_result(pcb, r);
 			conn.up_state = UP_NONE;
 			conn.req_len = 0;
 		}
@@ -619,24 +641,19 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 	conn.req[conn.req_len] = '\0';
 
 	/* 请求头结束（\r\n\r\n）→ 处理 */
-	if (strstr(conn.req, "\r\n\r\n") || conn.req_len >= HTTP_REQ_MAX - 1) {
+	const char *hdr_end = s_find(conn.req, "\r\n\r\n");
+	if (hdr_end || conn.req_len >= HTTP_REQ_MAX - 1) {
 		/* 检查是否固件上传：若是，body 可能已随本包到达 */
 		if (strncmp(conn.req, "POST /api/swio/flash", 20) == 0) {
 			uint32_t total = parse_content_length(conn.req);
 			uint32_t addr = (uint32_t)query_int(conn.req, "addr", 0x08000000);
-			const char *hdr_end = strstr(conn.req, "\r\n\r\n");
-			uint32_t hdr_len = (uint32_t)(hdr_end - conn.req) + 4;
+			uint32_t hdr_len = hdr_end ? (uint32_t)(hdr_end - conn.req) + 4 : conn.req_len;
 			uint32_t body_in_req = conn.req_len > hdr_len ? (uint32_t)(conn.req_len - hdr_len) : 0;
 
 			if (total > 0) {
 				int r = swio_stream_begin(addr, total);
 				if (r != SWIO_OK) {
-					char resp[64];
-					uint32_t o = 0;
-					o = s_cat(resp, o, sizeof(resp), "ERR begin r=");
-					o = s_int(resp, o, sizeof(resp), r);
-					o = s_cat(resp, o, sizeof(resp), "\r\n");
-					http_send(pcb, http_200, resp);
+					http_send_flash_result(pcb, r);
 				} else {
 					conn.up_state = UP_BODY;
 					conn.up_total = total;
@@ -651,16 +668,11 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					if (conn.up_recvd >= conn.up_total) {
 						int r2 = swio_stream_end();
-						char resp[96];
-						uint32_t o = 0;
-						o = s_cat(resp, o, sizeof(resp), r2 == SWIO_OK ? "OK flashed " : "ERR flash r=");
-						if (r2 != SWIO_OK) o = s_int(resp, o, sizeof(resp), r2);
-						o = s_cat(resp, o, sizeof(resp), "\r\n");
-						http_send(pcb, http_200, resp);
+						http_send_flash_result(pcb, r2);
 						conn.up_state = UP_NONE;
 					} else {
-						const char *cont = "HTTP/1.1 100 Continue\r\n\r\n";
-						tcp_write(pcb, cont, (u16_t)strlen(cont), TCP_WRITE_FLAG_COPY);
+						static const char cont[] = "HTTP/1.1 100 Continue\r\n\r\n";
+						tcp_write(pcb, cont, (u16_t)(sizeof(cont) - 1), TCP_WRITE_FLAG_COPY);
 						tcp_output(pcb);
 					}
 				}
