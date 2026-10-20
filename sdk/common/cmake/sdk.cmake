@@ -138,20 +138,49 @@ if(CHIP_SDK_RESOLVED STREQUAL "CH572")
     set(CH572_MCU_LD      10 CACHE INTERNAL "TARGET_MCU_LD")
     set(CH572_CHIP_DEFINE "CH57x" CACHE INTERNAL "芯片宏")
     set(CH572_FAMILY_DEFINE "CH5xx" CACHE INTERNAL "系列宏")
+    set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏")
     set(CH572_MARCH "rv32imac" CACHE STRING "RISC-V 架构扩展")
     set(CH572_MABI  "ilp32"   CACHE STRING "RISC-V ABI")
-elseif(CHIP_SDK_RESOLVED STREQUAL "CH591")
+elseif(CHIP_IS_CH591)
+    # CH591F / CH591D / CH591R / CH591 通用：Flash 192K + Boot 24K + Data 32K，RAM 26K
+    # 四者 Flash/RAM 完全相同（据 CH592/CH591 数据手册 V1.9 选型表），
+    # 仅封装与 GPIO 数量不同：
+    #   CH591F = QFN28 / 20 GPIO
+    #   CH591D = QFN20 / 12 GPIO
+    #   CH591R = TSSOP16 / 10 GPIO
     set(CH572_MCU_PACKAGE 1  CACHE INTERNAL "MCU_PACKAGE (CH591: Flash 192K)")
     set(CH572_MCU_LD      9  CACHE INTERNAL "TARGET_MCU_LD")
     set(CH572_CHIP_DEFINE "CH59x" CACHE INTERNAL "芯片宏")
     set(CH572_FAMILY_DEFINE "CH5xx" CACHE INTERNAL "系列宏")
+    # 封装变体宏：不同封装需要独立引脚表
+    if(CHIP_SDK_RESOLVED STREQUAL "CH591R")
+        set(CH572_VARIANT_DEFINE "CH591R" CACHE INTERNAL "封装变体宏（TSSOP16/10 GPIO）")
+    elseif(CHIP_SDK_RESOLVED STREQUAL "CH591D")
+        set(CH572_VARIANT_DEFINE "CH591D" CACHE INTERNAL "封装变体宏（QFN20/12 GPIO）")
+    else()
+        set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏（QFN28/20 GPIO）")
+    endif()
     set(CH572_MARCH "rv32imac" CACHE STRING "RISC-V 架构扩展")
     set(CH572_MABI  "ilp32"   CACHE STRING "RISC-V ABI")
-elseif(CHIP_SDK_RESOLVED STREQUAL "CH592")
+elseif(CHIP_IS_CH592)
+    # CH592X / CH592F / CH592A / CH592D / CH592：Flash 448K + Boot 24K + Data 32K，RAM 26K
+    # 据数据手册 V1.9 选型表，五者 Flash/RAM 完全相同，仅封装与 GPIO 数量不同：
+    #   CH592X = QFN32 / 24 GPIO
+    #   CH592F = QFN28 / 20 GPIO
+    #   CH592A = QFN28 / 20 GPIO（同 CH592F，仅最低电源电压 2.3V）
+    #   CH592D = QFN20 / 12 GPIO
     set(CH572_MCU_PACKAGE 2  CACHE INTERNAL "MCU_PACKAGE (CH592: Flash 448K)")
     set(CH572_MCU_LD      9  CACHE INTERNAL "TARGET_MCU_LD")
     set(CH572_CHIP_DEFINE "CH59x" CACHE INTERNAL "芯片宏")
     set(CH572_FAMILY_DEFINE "CH5xx" CACHE INTERNAL "系列宏")
+    # 封装变体宏：不同封装需要独立引脚表
+    if(CHIP_SDK_RESOLVED STREQUAL "CH592D")
+        set(CH572_VARIANT_DEFINE "CH592D" CACHE INTERNAL "封装变体宏（QFN20/12 GPIO）")
+    elseif(CHIP_SDK_RESOLVED STREQUAL "CH592F" OR CHIP_SDK_RESOLVED STREQUAL "CH592A")
+        set(CH572_VARIANT_DEFINE "CH592F" CACHE INTERNAL "封装变体宏（QFN28/20 GPIO）")
+    else()
+        set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏（QFN32/24 GPIO）")
+    endif()
     set(CH572_MARCH "rv32imac" CACHE STRING "RISC-V 架构扩展")
     set(CH572_MABI  "ilp32"   CACHE STRING "RISC-V ABI")
 elseif(CHIP_SDK_RESOLVED STREQUAL "CH32V003")
@@ -160,6 +189,7 @@ elseif(CHIP_SDK_RESOLVED STREQUAL "CH32V003")
     set(CH572_MCU_LD      0  CACHE INTERNAL "TARGET_MCU_LD")
     set(CH572_CHIP_DEFINE "CH32V003" CACHE INTERNAL "芯片宏")
     set(CH572_FAMILY_DEFINE "" CACHE INTERNAL "系列宏（V003 无）")
+    set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏")
     set(CH572_MARCH "rv32ec" CACHE STRING "RISC-V 架构扩展")
     set(CH572_MABI  "ilp32e" CACHE STRING "RISC-V ABI")
 else()
@@ -361,9 +391,8 @@ function(ch572_add_executable TARGET)
 
     # FreeRTOS 支持（CH59x 专用）
     if(ARG_FREERTOS)
-        if(NOT CHIP_SDK_RESOLVED STREQUAL "CH592" AND
-           NOT CHIP_SDK_RESOLVED STREQUAL "CH591")
-            message(FATAL_ERROR "FREERTOS 目前仅支持 CH592 / CH591")
+        if(NOT CHIP_IS_CH59X)
+            message(FATAL_ERROR "FREERTOS 目前仅支持 CH59x 系列（CH592X / CH591F / CH591D / CH591R）")
         endif()
 
         # 内核源文件（tasks/queue/list/timers/event_groups/stream_buffer/croutine）
@@ -392,9 +421,8 @@ function(ch572_add_executable TARGET)
 
     # LWIP 支持（CH59x 专用，依赖 FreeRTOS）
     if(ARG_LWIP)
-        if(NOT CHIP_SDK_RESOLVED STREQUAL "CH592" AND
-           NOT CHIP_SDK_RESOLVED STREQUAL "CH591")
-            message(FATAL_ERROR "LWIP 目前仅支持 CH592 / CH591")
+        if(NOT CHIP_IS_CH59X)
+            message(FATAL_ERROR "LWIP 目前仅支持 CH59x 系列（CH592X / CH591F / CH591D / CH591R）")
         endif()
 
         # 核心源文件（RAW API + TCP/UDP/ICMP/ARP，无 socket/DNS/DHCP）
@@ -471,6 +499,12 @@ function(ch572_add_executable TARGET)
         list(APPEND _family_defs "-D${CH572_FAMILY_DEFINE}")
     endif()
 
+    # 封装变体宏：CH591R 需要独立引脚表（TSSOP16，10 GPIO）
+    set(_variant_defs "")
+    if(NOT CH572_VARIANT_DEFINE STREQUAL "")
+        list(APPEND _variant_defs "-D${CH572_VARIANT_DEFINE}=1")
+    endif()
+
     # FreeRTOS：禁用 ch32fun 自带启动代码（由 Startup_CH592_FreeRTOS.S 提供）
     set(_freertos_defs "")
     if(ARG_FREERTOS)
@@ -488,6 +522,7 @@ function(ch572_add_executable TARGET)
         -mabi=${CH572_MABI}
         -D${CH572_CHIP_DEFINE}=1
         ${_family_defs}
+        ${_variant_defs}
         ${_freertos_defs}
         ${_lwip_defs}
         -DMCU_PACKAGE=${CH572_MCU_PACKAGE}

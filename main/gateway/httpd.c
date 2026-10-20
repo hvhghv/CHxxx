@@ -12,6 +12,10 @@
  *   POST /api/pwm             - 配置 PWM（body: ch=N&period=P&duty=D&en=0/1）
  *   POST /api/save            - 保存配置
  *   POST /api/load            - 加载配置
+ *   POST /api/swio?pin=N      - 设置 SWIO 引脚
+ *   GET  /api/swio/handshake  - SWIO 握手（读芯片 ID）
+ *   GET  /api/swio/chipid     - SWIO 读目标芯片 ID
+ *   POST /api/swio/reset      - SWIO 复位目标芯片
  *******************************************************************************/
 
 #include "ch32fun.h"
@@ -24,6 +28,7 @@
 #include "netroute.h"
 #include "swio.h"
 #include "bleapp.h"
+#include "spi_bus.h"
 #include "dhcps.h"
 #include "settings.h"
 #include "webui.h"
@@ -288,6 +293,14 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 				off = s_int(line, off, sizeof(line), g_pin_cfg[i].param1);
 				off = s_cat(line, off, sizeof(line),
 					g_pin_cfg[i].func == PIN_FUNC_UART_TX ? "_TX" : "_RX");
+			} else if (g_pin_cfg[i].func == PIN_FUNC_SPI) {
+				/* SPI：func 名带角色（SCK/MOSI/MISO/CSn/INTn） */
+				static const char *sr[] = { "SCK", "MOSI", "MISO", "CS", "INT" };
+				uint8_t role = g_pin_cfg[i].param2;
+				off = s_cat(line, off, sizeof(line), "SPI0_");
+				off = s_cat(line, off, sizeof(line), role < 5 ? sr[role] : "?");
+				if (role == PIN_SPI_CS || role == PIN_SPI_INT)
+					off = s_int(line, off, sizeof(line), g_pin_cfg[i].param1);
 			} else {
 				off = s_cat(line, off, sizeof(line), pinmux_func_name(g_pin_cfg[i].func));
 			}
@@ -324,11 +337,22 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 		 * 支持带实例号的 UARTn_TX / UARTn_RX（n=0..3），实例号存入 param1。
 		 * 其余为无实例名：NONE/GPIO_IN/GPIO_OUT/PWM/ADC/SPI/I2C/SWIO */
 		int func = -1;
-		int inst = 0;   /* UART 实例号 */
+		int inst = 0;   /* UART 实例号 / SPI 角色 */
 		if (strncmp(fs, "UART", 4) == 0 && fs[4] >= '0' && fs[4] <= '3') {
 			inst = fs[4] - '0';
 			if (strncmp(fs + 5, "_TX", 3) == 0) func = PIN_FUNC_UART_TX;
 			else if (strncmp(fs + 5, "_RX", 3) == 0) func = PIN_FUNC_UART_RX;
+		} else if (strncmp(fs, "SPI0_", 5) == 0) {
+			/* SPI0_SCK / SPI0_MOSI / SPI0_MISO / SPI0_CSn / SPI0_INTn */
+			const char *r = fs + 5;
+			if (strncmp(r, "SCK", 3) == 0)       { func = PIN_FUNC_SPI; inst = PIN_SPI_SCK; }
+			else if (strncmp(r, "MOSI", 4) == 0) { func = PIN_FUNC_SPI; inst = PIN_SPI_MOSI; }
+			else if (strncmp(r, "MISO", 4) == 0) { func = PIN_FUNC_SPI; inst = PIN_SPI_MISO; }
+			else if (strncmp(r, "CS", 2) == 0 && r[2] >= '0' && r[2] <= '3') {
+				func = PIN_FUNC_SPI; inst = PIN_SPI_CS;
+			} else if (strncmp(r, "INT", 3) == 0 && r[3] >= '0' && r[3] <= '3') {
+				func = PIN_FUNC_SPI; inst = PIN_SPI_INT;
+			}
 		} else {
 			static const char *names[] = { "NONE","GPIO_IN","GPIO_OUT","PWM",
 				"ADC","SPI","I2C","SWIO" };
@@ -346,12 +370,40 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			return;
 		}
 		pinmux_set_func(pin, func);
-		/* UART 引脚：param1 自动填实例号；其余引脚 param1 由 p1 指定 */
-		if (func == PIN_FUNC_UART_TX || func == PIN_FUNC_UART_RX)
+		if (func == PIN_FUNC_UART_TX || func == PIN_FUNC_UART_RX) {
+			/* UART 引脚：param1 自动填实例号 */
 			g_pin_cfg[pin].param1 = (uint8_t)inst;
-		else
+			g_pin_cfg[pin].param2 = (uint8_t)query_int(req, "p2", 0);
+		} else if (func == PIN_FUNC_SPI) {
+			/* SPI 引脚：param2=角色；CS/INT 的 param1=设备号（从 func 名解析） */
+			g_pin_cfg[pin].param2 = (uint8_t)inst;
+			if (inst == PIN_SPI_CS || inst == PIN_SPI_INT) {
+				/* func 名尾部的数字即设备号：SPI0_CSn / SPI0_INTn */
+				const char *r = fs + 5;
+				const char *num = (inst == PIN_SPI_CS) ? r + 2 : r + 3;
+				g_pin_cfg[pin].param1 = (uint8_t)(*num - '0');
+			} else {
+				g_pin_cfg[pin].param1 = 0;
+			}
+			g_pin_cfg[pin].arg1 = (uint8_t)query_int(req, "arg", 0);
+			/* flags：INT 有效电平 / SPI 角色（主机=0，从机=1） */
+			{
+				const char *bs = query_str(req, "bind");   /* 复用 bind 传 flags */
+				if (bs) g_pin_cfg[pin].flags = (uint8_t)query_int(req, "bind", 0);
+			}
+			pinmux_apply(pin);
+			spibus_reload();
+			int sr0 = settings_save();
+			CAT("set ");
+			CAT(pinmux_pin_name(pin));
+			CAT("=");
+			CAT(pinmux_func_name(g_pin_cfg[pin].func));
+			http_send_save_tail(pcb, body, off, sr0);
+			return;
+		} else {
 			g_pin_cfg[pin].param1 = (uint8_t)query_int(req, "p1", 0);
-		g_pin_cfg[pin].param2 = (uint8_t)query_int(req, "p2", 0);
+			g_pin_cfg[pin].param2 = (uint8_t)query_int(req, "p2", 0);
+		}
 		g_pin_cfg[pin].arg1   = (uint8_t)query_int(req, "arg", 0);
 		/* baud：UART 波特率（任意值，最高 6Mbps），转分频值存 uart_dl */
 		{
@@ -525,6 +577,29 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 		return;
 	}
 
+	/* SPI 状态与设备：GET /api/spi
+	 * 输出：role=master|slave\r\n
+	 *       dev=<n> cs=<引脚名|-> int=<引脚名|->\r\n（每设备一行） */
+	if (strncmp(req, "GET /api/spi", 12) == 0) {
+		uint32_t off = 0;
+		CAT("role=");
+		CAT(spibus_is_slave() ? "slave" : "master");
+		CAT("\r\n");
+		for (int d = 0; d < GW_SPI_MAX_DEV; d++) {
+			int cs = -1, ip = -1;
+			if (spibus_dev_info(d, &cs, &ip) != 0) continue;
+			CAT("dev=");
+			CATI(d);
+			CAT(" cs=");
+			CAT(cs >= 0 ? pinmux_pin_name(cs) : "-");
+			CAT(" int=");
+			CAT(ip >= 0 ? pinmux_pin_name(ip) : "-");
+			CAT("\r\n");
+		}
+		http_send(pcb, http_200, body);
+		return;
+	}
+
 	/* DHCP 配置：POST /api/dhcp?ip=X&mask=Y */
 	if (strncmp(req, "POST /api/dhcp", 14) == 0) {
 		const char *ips = query_str(req, "ip");
@@ -597,6 +672,64 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			return;
 		}
 		http_send(pcb, http_200, "ERR no url\r\n");
+		return;
+	}
+
+	/* ---- SWIO 调试接口（对应终端 swio / swiohs / swiochip / swioreset）----
+	 * POST /api/swio?pin=N         设置 SWIO 引脚（紧凑引脚编号）
+	 * GET  /api/swio/handshake     握手：r=<状态> id=<8位十六进制>
+	 * GET  /api/swio/chipid        读芯片 ID：r=<状态> id=0x<4位十六进制>
+	 * POST /api/swio/reset         复位目标芯片
+	 * 注意：reset 必须放在通用 swio 分支之前（前缀会被先匹配）。 */
+	if (strncmp(req, "POST /api/swio/reset", 20) == 0) {
+		swio_reset_target();
+		http_send(pcb, http_200, "swio reset\r\n");
+		return;
+	}
+	if (strncmp(req, "POST /api/swio", 14) == 0) {
+		const char *ps = query_str(req, "pin=");
+		if (!ps) {
+			http_send(pcb, http_200, "ERR no pin\r\n");
+			return;
+		}
+		int pin = atoi(ps);
+		swio_set_pin(pin);
+		uint32_t off = 0;
+		CAT("swio pin=");
+		CATI(pin);
+		CAT("\r\n");
+		http_send(pcb, http_200, body);
+		return;
+	}
+	if (strncmp(req, "GET /api/swio/handshake", 23) == 0) {
+		uint32_t id = 0;
+		int r = swio_handshake(&id);
+		uint32_t off = 0;
+		CAT("r=");
+		CATI(r);
+		CAT(" id=");
+		CATX(id);
+		CAT("\r\n");
+		http_send(pcb, http_200, body);
+		return;
+	}
+	if (strncmp(req, "GET /api/swio/chipid", 20) == 0) {
+		uint32_t id = 0;
+		int r = swio_read_chip_id_pub(&id);
+		uint32_t off = 0;
+		CAT("r=");
+		CATI(r);
+		CAT(" id=0x");
+		/* 16 位十六进制（4 位，与终端 swiochip 一致） */
+		for (int i = 3; i >= 0; i--) {
+			uint8_t nib = (uint8_t)((id >> (i * 4)) & 0xF);
+			char hx[2];
+			hx[0] = (char)(nib < 10 ? '0' + nib : 'A' + nib - 10);
+			hx[1] = '\0';
+			CAT(hx);
+		}
+		CAT("\r\n");
+		http_send(pcb, http_200, body);
 		return;
 	}
 

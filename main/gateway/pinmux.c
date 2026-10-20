@@ -44,16 +44,62 @@ uint32_t uart_div_to_baud(uint16_t dl)
  * ------------------------------------------------------------------------- */
 #define PM_PB(n)   (0x20 | (n))   /* PB 编码 */
 
-#if defined(CH591)
-/* CH591F QFN28：20 个 GPIO（据数据手册引脚图） */
+#if defined(CH591R)
+/* CH591R TSSOP16：10 个 GPIO（据数据手册 V1.9 第 3 页引脚图）
+ *   PA8/RXD1, PA9/TMR0/TXD1, PA12/SCS/PWM4/AIN2, PA13/SCK0/PWM5/AIN3,
+ *   PA14/MOSI/TXD0_/AIN4, PA15/MISO/RXD0_/AIN5,
+ *   PB10/UD-/TMR1_, PB11/UD+/TMR2_, PB22/TMR3, PB23/RST/TMR0_/TXD2/PWM11 */
+static const uint8_t g_pin_map[PIN_COUNT] = {
+	8, 9, 12, 13, 14, 15,                  /* PA8/9/12/13/14/15 */
+	PM_PB(10), PM_PB(11),                  /* PB10/11 */
+	PM_PB(22), PM_PB(23),                  /* PB22/23 */
+};
+#elif defined(CH591D)
+/* CH591D QFN20：10 个 GPIO（据数据手册 V1.9 第 5-7 页引脚描述表 CH591D 列）
+ *   引脚 1=PA15, 2=PA14, 3=PA13, 4=PA12, 6=PA8, 7=PA9,
+ *   8=PB11, 9=PB10, 10=PB23, 11=PB22
+ * 注意：CH591D 无 PA4/PA5（UART3）、PA6/PA7（UART2 映射）、PA10/PA11（32K 晶振）、
+ *       无 PB4/PB7（UART0）、无 PB12-15（UART1 映射 / LCD COM）
+ * 注：选型表标注 12 个 I/O，但引脚描述表仅 10 个 GPIO
+ *     （另 2 个为 X32MO/X32MI 晶振专用引脚，不计入 GPIO）。 */
+static const uint8_t g_pin_map[PIN_COUNT] = {
+	8, 9, 12, 13, 14, 15,          /* PA8/9/12/13/14/15 */
+	PM_PB(10), PM_PB(11),          /* PB10/11（USB D-/D+） */
+	PM_PB(22), PM_PB(23),          /* PB22/23 */
+};
+#elif defined(CH591)
+/* CH591F QFN28：20 个 GPIO（据数据手册引脚图）
+ *   PA4/5/8/9/10-15 + PB4/7/10-15/22-23 */
+static const uint8_t g_pin_map[PIN_COUNT] = {
+	4, 5, 8, 9, 10, 11, 12, 13, 14, 15,    /* PA4/5/8/9/10/11/12/13/14/15 */
+	PM_PB(4), PM_PB(7), PM_PB(10), PM_PB(11), PM_PB(12), PM_PB(13), PM_PB(14), PM_PB(15),  /* PB4/7/10-15 */
+	PM_PB(22), PM_PB(23),                   /* PB22-23 */
+};
+#elif defined(CH592D)
+/* CH592D QFN20：12 个 GPIO（据数据手册 V1.9 第 5-7 页引脚描述表 CH592D 列）
+ *   引脚 1=PA11, 2=PA10, 6=PA8, 7=PA9, 8=PB11, 9=PB10, 10=PB7, 11=PB4,
+ *   17=PA15, 18=PA14, 19=PA13, 20=PA12
+ * 注意：CH592D 无 PA4/PA5（UART3）、PA6/PA7（UART2 映射）、
+ *       无 PB12-15（UART1 映射 / LCD COM）、无 PB22/23 */
+static const uint8_t g_pin_map[PIN_COUNT] = {
+	8, 9, 10, 11, 12, 13, 14, 15,          /* PA8/9/10/11/12/13/14/15 */
+	PM_PB(4), PM_PB(7),                    /* PB4/7（UART0） */
+	PM_PB(10), PM_PB(11),                  /* PB10/11（USB D-/D+） */
+};
+#elif defined(CH592F)
+/* CH592F / CH592A QFN28：20 个 GPIO（据数据手册 V1.9 第 5-7 页引脚描述表 CH592F/A 列）
+ *   引脚 1=PA11, 2=PA10, 6=PA8, 7=PA9, 8=PB15, 9=PB14, 10=PB13, 11=PB12,
+ *   12=PB11, 13=PB10, 14=PB7, 15=PB4, 16=PB23, 17=PB22,
+ *   23=PA4, 24=PA5, 25=PA15, 26=PA14, 27=PA13, 28=PA12
+ * 注意：CH592F/A 无 PB0/PB6（UART0 MODEM）、无 PA6/PA7（UART2 映射） */
 static const uint8_t g_pin_map[PIN_COUNT] = {
 	4, 5, 8, 9, 10, 11, 12, 13, 14, 15,    /* PA4/5/8/9/10/11/12/13/14/15 */
 	PM_PB(4), PM_PB(7), PM_PB(10), PM_PB(11), PM_PB(12), PM_PB(13), PM_PB(14), PM_PB(15),  /* PB4/7/10-15 */
 	PM_PB(22), PM_PB(23),                   /* PB22-23 */
 };
 #else
-/* CH592X QFN32：24 个 GPIO（据数据手册引脚图）
- * 左：PA4-15；右：PB0/4/6/7/10-15/22-23 */
+/* CH592X QFN32：24 个 GPIO（据数据手册 V1.9 第 5-7 页引脚描述表 CH592X 列）
+ *   左：PA4-15；右：PB0/4/6/7/10-15/22-23 */
 static const uint8_t g_pin_map[PIN_COUNT] = {
 	4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,    /* PA4-15 */
 	PM_PB(0), PM_PB(4), PM_PB(6), PM_PB(7),      /* PB0/4/6/7 */
@@ -175,6 +221,84 @@ int pinmux_apply(int pin)
 		break;
 
 	case PIN_FUNC_SPI:
+		/* SPI 引脚按角色配置电气属性（总线本身由 spi_bus.c 初始化）
+		 * 角色在编译期裁剪：仅主机/仅从机时无运行时判断 */
+		switch (c->param2) {
+		case PIN_SPI_SCK:
+#if GW_SPI_ROLE_MASTER && GW_SPI_ROLE_SLAVE
+			/* 主机=输出，从机=输入 */
+			funPinMode(p, (c->flags & PIN_FLAG_SPI_SLAVE)
+				? GPIO_ModeIN_Floating : GPIO_ModeOut_PP_5mA);
+#elif GW_SPI_ROLE_MASTER
+			funPinMode(p, GPIO_ModeOut_PP_5mA);
+#else
+			funPinMode(p, GPIO_ModeIN_Floating);
+#endif
+			break;
+		case PIN_SPI_MOSI:
+#if GW_SPI_ROLE_MASTER && GW_SPI_ROLE_SLAVE
+			/* 主机=输出，从机=输入 */
+			funPinMode(p, (c->flags & PIN_FLAG_SPI_SLAVE)
+				? GPIO_ModeIN_Floating : GPIO_ModeOut_PP_5mA);
+#elif GW_SPI_ROLE_MASTER
+			funPinMode(p, GPIO_ModeOut_PP_5mA);
+#else
+			funPinMode(p, GPIO_ModeIN_Floating);
+#endif
+			break;
+		case PIN_SPI_MISO:
+#if GW_SPI_ROLE_MASTER && GW_SPI_ROLE_SLAVE
+			/* 主机=输入，从机=输出 */
+			funPinMode(p, (c->flags & PIN_FLAG_SPI_SLAVE)
+				? GPIO_ModeOut_PP_5mA : GPIO_ModeIN_Floating);
+#elif GW_SPI_ROLE_MASTER
+			funPinMode(p, GPIO_ModeIN_Floating);
+#else
+			funPinMode(p, GPIO_ModeOut_PP_5mA);
+#endif
+			break;
+		case PIN_SPI_CS:
+#if GW_SPI_ROLE_MASTER && GW_SPI_ROLE_SLAVE
+			/* 主机=软件 GPIO 输出（默认高=未选中）；从机=硬件 SCS 输入 */
+			if (c->flags & PIN_FLAG_SPI_SLAVE)
+				funPinMode(p, GPIO_ModeIN_PU);
+			else {
+				funPinMode(p, GPIO_ModeOut_PP_5mA);
+				funDigitalWrite(p, FUN_HIGH);   /* 默认释放 */
+			}
+#elif GW_SPI_ROLE_MASTER
+			funPinMode(p, GPIO_ModeOut_PP_5mA);
+			funDigitalWrite(p, FUN_HIGH);       /* 默认释放 */
+#else
+			funPinMode(p, GPIO_ModeIN_PU);      /* 硬件 SCS 输入 */
+#endif
+			break;
+		case PIN_SPI_INT:
+#if GW_SPI_ROLE_MASTER && GW_SPI_ROLE_SLAVE
+			/* 主机=输入（对端驱动）；从机=输出（本机驱动） */
+			if (c->flags & PIN_FLAG_SPI_SLAVE) {
+				funPinMode(p, GPIO_ModeOut_PP_5mA);
+				funDigitalWrite(p, (c->flags & PIN_FLAG_SPI_INT_HIGH) ? FUN_LOW : FUN_HIGH);
+			} else {
+				funPinMode(p, (c->flags & PIN_FLAG_SPI_INT_HIGH)
+					? GPIO_ModeIN_PD : GPIO_ModeIN_PU);
+			}
+#elif GW_SPI_ROLE_MASTER
+			/* 仅主机：INT 为输入 */
+			funPinMode(p, (c->flags & PIN_FLAG_SPI_INT_HIGH)
+				? GPIO_ModeIN_PD : GPIO_ModeIN_PU);
+#else
+			/* 仅从机：INT 为输出 */
+			funPinMode(p, GPIO_ModeOut_PP_5mA);
+			funDigitalWrite(p, (c->flags & PIN_FLAG_SPI_INT_HIGH) ? FUN_LOW : FUN_HIGH);
+#endif
+			break;
+		default:
+			funPinMode(p, GPIO_ModeIN_Floating);
+			break;
+		}
+		break;
+
 	case PIN_FUNC_I2C:
 		/* 阶段 4+ 实现具体外设初始化 */
 		break;

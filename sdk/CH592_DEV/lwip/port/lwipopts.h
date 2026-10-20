@@ -61,8 +61,8 @@
  * ------------------------------------------------------------------------- */
 #define LWIP_IPV4                   1
 #define LWIP_IPV6                   0
-#define LWIP_ICMP                   1
-#define LWIP_RAW                    1
+#define LWIP_ICMP                   0      /* 不用 ping / ICMP 错误响应（省 Flash） */
+#define LWIP_RAW                    0      /* 不用 raw API（省 Flash） */
 #define LWIP_UDP                    1
 #define LWIP_TCP                    1
 #define LWIP_DNS                    0      /* 不用 DNS */
@@ -105,7 +105,7 @@
 #define ARP_TABLE_SIZE              4
 #define LWIP_ETHERNET               1
 #define LWIP_IGMP                   0
-#define LWIP_BROADCAST_PING         1
+#define LWIP_BROADCAST_PING         0      /* ICMP 已关，无广播 ping */
 #define LWIP_MULTICAST_PING         0
 
 /* ---------------------------------------------------------------------------

@@ -194,12 +194,17 @@ function connect(){ localStorage.setItem('gw_host',V('host').replace(/\/$/,''));
 /* 功能列表（含外设实例：UART0-3、SPI0、I2C） */
 const FUNCS=['NONE','GPIO_IN','GPIO_OUT','SWIO',
   'UART0_TX','UART0_RX','UART1_TX','UART1_RX','UART2_TX','UART2_RX','UART3_TX','UART3_RX',
-  'SPI0_MOSI','SPI0_MISO','SPI0_SCK','SPI0_SCS','I2C_SCL','I2C_SDA','PWM','ADC'];
+  'SPI0_SCK','SPI0_MOSI','SPI0_MISO',
+  'SPI0_CS0','SPI0_CS1','SPI0_CS2','SPI0_CS3',
+  'SPI0_INT0','SPI0_INT1','SPI0_INT2','SPI0_INT3',
+  'I2C_SCL','I2C_SDA','PWM','ADC'];
 /* 功能中文名（用于显示） */
 const FUNC_CN={NONE:'未使用',GPIO_IN:'GPIO 输入',GPIO_OUT:'GPIO 输出',SWIO:'SWIO 烧录',
   UART0_TX:'UART0 TX',UART0_RX:'UART0 RX',UART1_TX:'UART1 TX',UART1_RX:'UART1 RX',
   UART2_TX:'UART2 TX',UART2_RX:'UART2 RX',UART3_TX:'UART3 TX',UART3_RX:'UART3 RX',
-  SPI0_MOSI:'SPI0 MOSI',SPI0_MISO:'SPI0 MISO',SPI0_SCK:'SPI0 SCK',SPI0_SCS:'SPI0 SCS',
+  SPI0_SCK:'SPI0 SCK',SPI0_MOSI:'SPI0 MOSI',SPI0_MISO:'SPI0 MISO',
+  SPI0_CS0:'SPI0 CS0',SPI0_CS1:'SPI0 CS1',SPI0_CS2:'SPI0 CS2',SPI0_CS3:'SPI0 CS3',
+  SPI0_INT0:'SPI0 INT0',SPI0_INT1:'SPI0 INT1',SPI0_INT2:'SPI0 INT2',SPI0_INT3:'SPI0 INT3',
   I2C_SCL:'I2C SCL',I2C_SDA:'I2C SDA',PWM:'PWM',ADC:'ADC'};
 /* 外设树：大类 → 实例 → 信号
  * 用于「按外设」视图：先选大类（GPIO/UART/SPI...），展开后选实例（UART0/UART1...），
@@ -214,7 +219,11 @@ const TREE=[
     {name:'UART3', sigs:[['UART3_TX','TX'],['UART3_RX','RX']]},
   ]},
   {cat:'SPI', ic:'▤', insts:[
-    {name:'SPI0', sigs:[['SPI0_MOSI','MOSI'],['SPI0_MISO','MISO'],['SPI0_SCK','SCK'],['SPI0_SCS','SCS']]},
+    {name:'SPI0', sigs:[
+      ['SPI0_SCK','SCK'],['SPI0_MOSI','MOSI'],['SPI0_MISO','MISO'],
+      ['SPI0_CS0','CS0'],['SPI0_CS1','CS1'],['SPI0_CS2','CS2'],['SPI0_CS3','CS3'],
+      ['SPI0_INT0','INT0'],['SPI0_INT1','INT1'],['SPI0_INT2','INT2'],['SPI0_INT3','INT3'],
+    ]},
   ]},
   {cat:'I2C', ic:'◇', insts:[
     {name:'I2C', sigs:[['I2C_SCL','SCL'],['I2C_SDA','SDA']]},
@@ -241,7 +250,7 @@ const PIN_CAPS={
   PA9:['UART1_TX','PWM','ADC'],              // TXD1, TMR0, AIN13
   PA10:['PWM'],                              // X32KI, TMR1
   PA11:['PWM'],                              // X32KO, TMR2
-  PA12:['SPI0_SCS','PWM','ADC'],             // SCS, PWM4, AIN2
+  PA12:['SPI0_CS0','SPI0_CS1','SPI0_CS2','SPI0_CS3','PWM','ADC'],  // SCS(从机硬件), 可做任意设备软件 CS
   PA13:['SPI0_SCK','PWM','ADC'],             // SCK0, PWM5, AIN3
   PA14:['SPI0_MOSI','UART0_TX','ADC'],       // MOSI, TXD0_, AIN4
   PA15:['SPI0_MISO','UART0_RX','ADC'],       // MISO, RXD0_, AIN5
@@ -251,7 +260,7 @@ const PIN_CAPS={
   PB7:['UART0_TX','PWM'],                    // TXD0, PWM9
   PB10:['PWM'],                              // UD-, TMR1_
   PB11:['PWM'],                              // UD+, TMR2_
-  PB12:['SPI0_SCS','UART1_RX'],              // SCS_, RXD1_
+  PB12:['SPI0_CS0','SPI0_CS1','SPI0_CS2','SPI0_CS3','UART1_RX'],  // SCS_(从机硬件), RXD1_
   PB13:['SPI0_SCK','UART1_TX'],              // SCK0_, TXD1_
   PB14:['SPI0_MOSI','I2C_SDA','PWM'],        // MOSI_, SDA, PWM10
   PB15:['SPI0_MISO','I2C_SCL'],              // MISO_, SCL
@@ -480,7 +489,11 @@ function pmSigRow(func,short){
     : `<span class=muted>无可用引脚</span>`;
   // UART 信号：仅在 TX 行附加串口参数配置（TX/RX 共享同一 UART），置于 TX 行上方
   const uartExtra=isUartTxFunc(func)?uartCfgRow(func):'';
-  return `${uartExtra}<div class=acc-row>
+  // SPI 信号：仅在 SCK 行附加总线配置（角色/时钟分频），置于 SCK 行上方
+  const spiExtra=(func==='SPI0_SCK')?spiCfgRow():'';
+  // SPI INT 信号：附加极性配置
+  const intExtra=(/^SPI0_INT\d$/.test(func))?spiIntCfgRow(func):'';
+  return `${uartExtra}${spiExtra}${intExtra}<div class=acc-row>
     <span class=sig><b>${short}</b><span>${func}</span></span>
     <span class=used>${chips||'<span class=muted>未配置</span>'}</span>
     <span class=add>${add}</span>
@@ -488,6 +501,58 @@ function pmSigRow(func,short){
 }
 /* 是否 UART TX 信号（UARTn_TX）——串口参数只在 TX 行显示 */
 function isUartTxFunc(f){ return /^UART\d_TX$/.test(f); }
+/* SPI 总线配置行（主机/从机 + 时钟分频），作用于 SCK 引脚 */
+function spiCfgRow(){
+  const sck=PINS.find(p=>p.func==='SPI0_SCK');
+  if(!sck) return '';
+  const idx=PINS.indexOf(sck);
+  const isSlave=(sck.p1&2)?1:0;      // flags bit1 = 从机
+  const div=sck.arg||4;              // 时钟分频
+  return `<div class=uartcfg>
+    <span class=uc-label>SPI 总线</span>
+    <label>角色 <select id="sr-0">
+      <option value="0" ${isSlave===0?'selected':''}>主机</option>
+      <option value="1" ${isSlave===1?'selected':''}>从机</option>
+    </select></label>
+    <label>时钟分频 <input id="sd-0" type=number value="${div}" min="2" max="255" style="width:70px"></label>
+    <button class="btn sm" onclick="applySpiBus(${idx})">应用</button>
+  </div>`;
+}
+async function applySpiBus(idx){
+  const role=+V('sr-0'), div=+V('sd-0');
+  // SCK 引脚：flags bit1 = 从机；arg = 分频
+  const flags=role?2:0;
+  await call(null,`/api/pin?pin=${idx}&func=SPI0_SCK&bind=${flags}&arg=${div}`,'POST');
+  toast('SPI 总线已应用','ok'); await refreshPins();
+}
+/* SPI INT 引脚配置行（有效电平 + 触发方式） */
+function spiIntCfgRow(func){
+  const dev=func.slice(-1);
+  const p=PINS.find(x=>x.func===func);
+  if(!p) return '';
+  const idx=PINS.indexOf(p);
+  const high=(p.p1&1)?1:0;      // flags bit0 = 高有效
+  const trig=p.arg||0;          // 触发方式（pin_irq_t）
+  return `<div class=uartcfg>
+    <span class=uc-label>INT${dev} 配置</span>
+    <label>有效电平 <select id="ih-${dev}">
+      <option value="0" ${high===0?'selected':''}>低电平有效</option>
+      <option value="1" ${high===1?'selected':''}>高电平有效</option>
+    </select></label>
+    <label>触发方式 <select id="it-${dev}">
+      <option value="0" ${trig===0?'selected':''}>无</option>
+      <option value="1" ${trig===1?'selected':''}>上升沿</option>
+      <option value="2" ${trig===2?'selected':''}>下降沿</option>
+      <option value="3" ${trig===3?'selected':''}>双边沿</option>
+    </select></label>
+    <button class="btn sm" onclick="applySpiInt(${idx},'${dev}')">应用</button>
+  </div>`;
+}
+async function applySpiInt(idx,dev){
+  const high=+V('ih-'+dev), trig=+V('it-'+dev);
+  await call(null,`/api/pin?pin=${idx}&func=SPI0_INT${dev}&bind=${high}&arg=${trig}`,'POST');
+  toast('INT'+dev+' 已应用','ok'); await refreshPins();
+}
 /* UART 参数配置行（模式/波特率/校验/停止位），作用于该 UART 的 TX 引脚 */
 /* 常用波特率（60MHz 下精确值优先：7.5M/DL 序列；标准档位含小误差）
  * 精确序列：7.5M, 3.75M, 2.5M, 1.875M, 1.5M, 1.25M, 937.5K, 750K, 468.75K, 375K, 187.5K, 93.75K... */
@@ -709,7 +774,8 @@ function renderSWIO(){
     <div class=row style="color:var(--muted);font-size:13px">${note}</div>
     <div class=row>
       <button class="btn ghost" onclick="call('out-swio','/api/swio/handshake')">握手</button>
-      <button class="btn ghost" onclick="call('out-swio','/api/swio')">进度</button>
+      <button class="btn ghost" onclick="call('out-swio','/api/swio/chipid')">芯片 ID</button>
+      <button class="btn ghost" onclick="call('out-swio','/api/swio/reset','POST')">复位目标</button>
     </div>
     <div class=row><label>地址</label><input id=sa value="0x08000000"><input type=file id=sf accept=.bin>
       <button class="btn danger" onclick=flash()>烧录</button></div>

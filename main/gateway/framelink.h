@@ -32,6 +32,22 @@ typedef enum {
 /* 实际启用的通道数（省 RAM：仅 4 个 UART） */
 #define FRAMELINK_ACTIVE_CH  4
 
+/* 单帧负载上限（不含帧头）
+ *   16bit UUID 注册：3 + 6×3 = 21B
+ *   128bit UUID 注册：3 + 6×19 = 117B（需 >= 128）
+ * 默认随 BLE_UUID128_SUPPORT：开启时 128，关闭时 48（仅 16bit UUID，省 RAM）。
+ * 可通过 -DFRAMELINK_MAX_PAYLOAD=N 覆盖。 */
+#ifndef BLE_UUID128_SUPPORT
+#define BLE_UUID128_SUPPORT 0
+#endif
+#ifndef FRAMELINK_MAX_PAYLOAD
+#if BLE_UUID128_SUPPORT
+#define FRAMELINK_MAX_PAYLOAD  128
+#else
+#define FRAMELINK_MAX_PAYLOAD  48
+#endif
+#endif
+
 /* 帧处理器回调：返回响应长度（0=无响应）
  * ch: 帧到达的链路通道 */
 typedef uint32_t (*frame_handler_t)(framelink_ch_t ch, const frame_t *f,

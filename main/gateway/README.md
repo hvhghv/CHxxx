@@ -4,7 +4,19 @@
 **HTTP 服务器 + Web UI**、**BLE（动态 GATT）**、**DHCP 服务器**、**帧协议**、
 **引脚复用**、**SWIO 烧录** 于一体。
 
-目标芯片：**CH592**（448KB Flash，BLE 双模式）或 **CH591**（192KB Flash，BLE 仅从机）。
+目标芯片（CH592/CH591 数据手册 V1.9 选型表全部 7 个型号）：
+
+| 型号 | Flash | 封装 | GPIO |
+|------|-------|------|------|
+| **CH592X** | 448KB | QFN32 | 24 |
+| **CH592F** | 448KB | QFN28 | 20 |
+| **CH592A** | 448KB | QFN28 | 20 |
+| **CH592D** | 448KB | QFN20 | 12 |
+| **CH591F** | 192KB | QFN28 | 20 |
+| **CH591D** | 192KB | QFN20 | 10 |
+| **CH591R** | 192KB | TSSOP16 | 10 |
+
+兼容别名：`CH592` ≡ `CH592X`，`CH591` ≡ `CH591F`。
 
 ---
 
@@ -39,10 +51,12 @@ main/gateway/
 ├── framehdl.c/h       帧命令处理器（GPIO/ADC/PWM/UART/NET）
 ├── netroute.c/h       网络路由（IP 包 ↔ 帧转发）
 ├── periph.c/h         外设驱动（PWM/ADC/UART/SPI）
+├── spi_bus.c/h        SPI 多设备总线（多 CS/INT + 主从切换，CH592）
 ├── httpd.c/h          HTTP 服务器 + REST API
 ├── webui.h            内嵌单页 Web UI（#include 生成的头文件）
 ├── webui.html         Web UI 源（纯 HTML，可浏览器预览）
 ├── tools/html2h.py    HTML → C 头文件转换脚本（构建时运行）
+├── lwipopts.h         LWIP 配置（**项目独立**，优先于 SDK 的 lwip/port/lwipopts.h）
 ├── dhcps.c/h          极简 DHCP 服务器
 ├── swio.c/h           SWIO 烧录 CH32V003
 ├── bleapp.c/h         BLE 应用（GAP + 动态 GATT）
@@ -75,8 +89,8 @@ cmake --build build --target gateway
 
 | 芯片 | FLASH | RAM | BLE 模式 |
 |---|---|---|---|
-| **CH592** | 226920 B / 448 KB (49.46%) | 26016 B / 26 KB (97.72%) | dual（双模式） |
-| **CH591** | 195576 B / 192 KB (99.48%) | 25472 B / 26 KB (95.67%) | perf（仅从机） |
+| **CH592** | 230280 B / 448 KB (50.20%) | 25984 B / 26 KB (97.60%) | dual（双模式） |
+| **CH591** | 193868 B / 192 KB (98.61%) | 24992 B / 26 KB (93.87%) | perf（仅从机） |
 
 ### 构建选项
 
@@ -86,6 +100,22 @@ cmake --build build --target gateway
 | `BLE_ROLE` | dual | BLE 角色：`perf`（仅从机）/`cent`（仅主机）/`dual`（双模式） |
 | `BLE_UUID128` | OFF | 支持 128bit UUID（开启后帧负载上限 128，关闭时 48，省 RAM） |
 | `GW_CDC_COUNT` | 4 | CDC-ACM 数量：**3**（终端+2 UART，CH591）/ **4**（终端+3 UART，CH592） |
+| `GW_PIN_COUNT` | 24 | 引脚数量：**10**（CH591R/CH591D）/ **12**（CH592D）/ **20**（CH591F/CH592F/CH592A）/ **24**（CH592X） |
+| `GW_CDC_DYNAMIC` | ON | CDC 动态绑定（UART 可绑定任意 CDC）；CH591 自动关闭 |
+| `GW_SPI_MULTIDEV` | ON | SPI 多设备（多 CS/INT + 主从切换）；CH592 / CH591 均开启 |
+| `GW_SPI_ROLE` | both | SPI 角色：`master`（仅主机）/ `slave`（仅从机）/ `both`；CH591 自动降为 `slave` |
+| `GW_LWIP_UDP` | ON | LWIP UDP 支持（**DHCP 服务器必需**）；CH591 自动关闭 |
+| `GW_LWIP_RAW` | ON | LWIP RAW API 支持；CH591 自动关闭 |
+| `GW_LWIP_ICMP` | ON | LWIP ICMP 支持（ping）；CH591 自动关闭 |
+
+> **注意**：CH591 关闭 UDP 后，DHCP 服务器不工作，PC 需手动配置 IP（如 `192.168.7.2/24`）。
+
+### LWIP 配置
+
+本项目使用**独立**的 `main/gateway/lwipopts.h`（不共享 SDK 的 `sdk/CH592_DEV/lwip/port/lwipopts.h`）。
+CMake 通过 `target_include_directories(... BEFORE ...)` 让项目目录优先于 SDK 的 lwip/port。
+
+当前已关闭：`LWIP_ICMP`、`LWIP_RAW`、`LWIP_DNS`、`LWIP_DHCP`、`LWIP_IPV6`、`LWIP_IGMP`（省 ~1.2KB Flash）。
 
 > CH591 会自动将 `BLE_ROLE` 从 `dual` 降为 `perf`、`GW_CDC_COUNT` 从 4 降为 3（资源限制）。
 
@@ -120,6 +150,7 @@ cmake --build build --target gateway
 | `default` | 恢复默认配置 |
 | `frame U T` | 在 UART U 发送 type T 的测试帧 |
 | `spi master [div]` / `spi slave` | 配置 SPI 主/从模式 |
+| `spi dev` | 列出 SPI 设备（CS/INT 引脚，**仅 CH592**） |
 | `uart N [mode forward\|frame\|baud B\|parity none\|odd\|even\|stop 1\|2]` | 查看/配置 UART N（**仅 CH592**，CH591 Flash 受限时省略） |
 | `swio N` | 设置 SWIO 烧录引脚 |
 | `swiohs` | SWIO 握手（读 DMCFGR） |

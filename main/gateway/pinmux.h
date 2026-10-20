@@ -16,11 +16,19 @@ extern "C" {
 #endif
 
 /* 引脚数量（由 CMake 传入 GW_PIN_COUNT；缺省按芯片）
- *   CH592（QFN32）：24 个 GPIO（PA4-15 + PB0/4/6/7/10-15/22-23）
- *   CH591（QFN28）：20 个 GPIO（PA4/5/8/9/10-15 + PB4/7/10-15/22-23）
+ *   CH592X（QFN32）：24 个 GPIO（PA4-15 + PB0/4/6/7/10-15/22-23）
+ *   CH592F/A（QFN28）：20 个 GPIO（PA4/5/8-15 + PB4/7/10-15/22-23）
+ *   CH592D（QFN20）：12 个 GPIO（PA8-15 + PB4/7/10/11）
+ *   CH591F（QFN28）：20 个 GPIO（PA4/5/8/9/10-15 + PB4/7/10-15/22-23）
+ *   CH591D（QFN20）：10 个 GPIO（PA8/9/12/13/14/15 + PB10/11/22/23）
+ *   CH591R（TSSOP16）：10 个 GPIO（PA8/9/12/13/14/15 + PB10/11/22/23）
  * 紧凑编号 0..GW_PIN_COUNT-1 → 物理引脚（见 pinmux.c 的 g_pin_map[]） */
 #ifndef GW_PIN_COUNT
-#  if defined(CH591)
+#  if defined(CH591R) || defined(CH591D)
+#    define GW_PIN_COUNT 10
+#  elif defined(CH592D)
+#    define GW_PIN_COUNT 12
+#  elif defined(CH591) || defined(CH592F)
 #    define GW_PIN_COUNT 20
 #  else
 #    define GW_PIN_COUNT 24
@@ -46,10 +54,59 @@ typedef enum {
 	PIN_FUNC_UART_RX,    /* 串口 RX */
 	PIN_FUNC_PWM,        /* PWM 输出 */
 	PIN_FUNC_ADC,        /* ADC 输入 */
-	PIN_FUNC_SPI,        /* SPI */
+	PIN_FUNC_SPI,        /* SPI 总线信号（SCK/MOSI/MISO/CS/INT，见 pin_spi_role_t） */
 	PIN_FUNC_I2C,        /* I2C */
 	PIN_FUNC_SWIO,       /* 软件 SWIO（烧录 CH32V003） */
 } pin_func_t;
+
+/* SPI 引脚角色（PIN_FUNC_SPI 时，存 param2）
+ *   主机模式：SCK/MOSI 输出，MISO 输入；CS 为软件 GPIO 输出；INT 为输入（对端驱动）
+ *   从机模式：SCK/MOSI 输入，MISO 输出；CS 为硬件 SCS 输入；INT 为输出（本机驱动） */
+typedef enum {
+	PIN_SPI_SCK  = 0,   /* 时钟（主机输出/从机输入） */
+	PIN_SPI_MOSI = 1,   /* 主出从入 */
+	PIN_SPI_MISO = 2,   /* 主入从出 */
+	PIN_SPI_CS   = 3,   /* 片选：主机=软件 GPIO 输出；从机=硬件 SCS 输入 */
+	PIN_SPI_INT  = 4,   /* 中断线：主机=输入（对端驱动）；从机=输出（本机驱动） */
+} pin_spi_role_t;
+
+/* SPI 引脚字段约定（PIN_FUNC_SPI）：
+ *   param1 = 设备号（CS/INT 用，0..GW_SPI_MAX_DEV-1）；SCK/MOSI/MISO 忽略
+ *   param2 = pin_spi_role_t
+ *   flags  = bit0: INT 有效电平（0=低有效，1=高有效）
+ *            bit1: SPI 角色（0=主机，1=从机）—— 仅 SCK 引脚上有效，作为总线角色标志
+ *   arg1   = INT 触发方式（pin_irq_t）；CS 忽略 */
+#define PIN_FLAG_SPI_INT_HIGH   0x01   /* INT 高有效 */
+#define PIN_FLAG_SPI_SLAVE      0x02   /* SPI 从机模式 */
+
+/* 最多支持的 SPI 设备数（每设备 1 条 CS + 1 条 INT）
+ * CH591 Flash 紧张时可用 -DGW_SPI_MAX_DEV=2 减小 */
+#ifndef GW_SPI_MAX_DEV
+#  if defined(CH591)
+#    define GW_SPI_MAX_DEV  2
+#  else
+#    define GW_SPI_MAX_DEV  4
+#  endif
+#endif
+
+/* SPI 角色支持（编译期裁剪，省 Flash）
+ *   GW_SPI_ROLE_MASTER = 1, GW_SPI_ROLE_SLAVE = 0  → 仅主机
+ *   GW_SPI_ROLE_MASTER = 0, GW_SPI_ROLE_SLAVE = 1  → 仅从机
+ *   GW_SPI_ROLE_MASTER = 1, GW_SPI_ROLE_SLAVE = 1  → 主机 + 从机
+ * 默认：CH591 仅从机（Flash 受限）；CH592 主机 + 从机 */
+#ifndef GW_SPI_ROLE_MASTER
+#  define GW_SPI_ROLE_MASTER 1
+#endif
+#ifndef GW_SPI_ROLE_SLAVE
+#  if defined(CH591)
+#    define GW_SPI_ROLE_SLAVE 1
+#  else
+#    define GW_SPI_ROLE_SLAVE 1
+#  endif
+#endif
+#if !GW_SPI_ROLE_MASTER && !GW_SPI_ROLE_SLAVE
+#  error "GW_SPI_ROLE_MASTER 与 GW_SPI_ROLE_SLAVE 不能同时为 0"
+#endif
 
 /* GPIO 输入配置 */
 typedef enum {

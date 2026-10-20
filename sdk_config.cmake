@@ -3,10 +3,16 @@
 # ===========================================================================
 # 选择目标芯片 SDK。
 #
-# 支持的值：
+# 支持的值（CH592/CH591 数据手册 V1.9 选型表全部 7 个型号）：
 #   CH572     - CH572 (RV32IMAC, 12KB RAM, 240KB Flash, BLE 5.0)
-#   CH592     - CH592 (RV32IMAC, 26KB RAM, 448KB Flash, BLE 5.4)
-#   CH591     - CH591 (RV32IMAC, 26KB RAM, 192KB Flash, BLE 5.4)
+#   CH592X    - CH592X (448KB Flash, QFN32, 24 GPIO)
+#   CH592F    - CH592F (448KB Flash, QFN28, 20 GPIO)
+#   CH592A    - CH592A (448KB Flash, QFN28, 20 GPIO，同 CH592F，仅最低电压 2.3V)
+#   CH592D    - CH592D (448KB Flash, QFN20, 12 GPIO)
+#   CH591F    - CH591F (192KB Flash, QFN28, 20 GPIO)
+#   CH591D    - CH591D (192KB Flash, QFN20, 10 GPIO)
+#   CH591R    - CH591R (192KB Flash, TSSOP16, 10 GPIO)
+#   CH592/CH591 - 兼容别名（分别等同于 CH592X / CH591F）
 #   CH32V003  - CH32V003 (RV32EC, 2KB RAM, 16KB Flash, 无 BLE/USB)
 #
 # 优先级（从高到低）：
@@ -65,8 +71,36 @@ else()
     set(_cfg_use "CH572")
 endif()
 
-set(CHIP_SDK_RESOLVED "${_cfg_use}" CACHE STRING "最终生效的芯片：CH572 / CH592 / CH591 / CH32V003" FORCE)
-set_property(CACHE CHIP_SDK_RESOLVED PROPERTY STRINGS CH572 CH592 CH591 CH32V003)
+set(CHIP_SDK_RESOLVED "${_cfg_use}" CACHE STRING "最终生效的芯片：CH572 / CH592X / CH592F / CH592A / CH592D / CH591F / CH591D / CH591R / CH32V003" FORCE)
+set_property(CACHE CHIP_SDK_RESOLVED PROPERTY STRINGS
+    CH572 CH592X CH592F CH592A CH592D CH591F CH591D CH591R CH592 CH591 CH32V003)
+
+# ---------------------------------------------------------------------------
+# 芯片系列判定（供各 CMakeLists 复用，避免重复罗列型号）
+# ---------------------------------------------------------------------------
+# CH59x 系列：CH592X/F/A/D + CH591F/D/R（+ 兼容别名 CH592/CH591）
+set(_ch59x_list CH592X CH592F CH592A CH592D CH591F CH591D CH591R CH592 CH591)
+if(CHIP_SDK_RESOLVED IN_LIST _ch59x_list)
+    set(CHIP_IS_CH59X TRUE)
+else()
+    set(CHIP_IS_CH59X FALSE)
+endif()
+
+# CH591 系列（192KB Flash，需激进裁剪）：CH591F/D/R + 别名 CH591
+set(_ch591_list CH591F CH591D CH591R CH591)
+if(CHIP_SDK_RESOLVED IN_LIST _ch591_list)
+    set(CHIP_IS_CH591 TRUE)
+else()
+    set(CHIP_IS_CH591 FALSE)
+endif()
+
+# CH592 系列（448KB Flash）：CH592X/F/A/D + 别名 CH592
+set(_ch592_list CH592X CH592F CH592A CH592D CH592)
+if(CHIP_SDK_RESOLVED IN_LIST _ch592_list)
+    set(CHIP_IS_CH592 TRUE)
+else()
+    set(CHIP_IS_CH592 FALSE)
+endif()
 
 # ---------------------------------------------------------------------------
 # SDK 目录映射
@@ -77,14 +111,14 @@ set(SDK_COMMON_DIR "${SDK_ROOT_DIR}/common")
 if(CHIP_SDK_RESOLVED STREQUAL "CH572")
     set(SDK_CHIP_DIR "${SDK_ROOT_DIR}/CH572_DEV")
     set(SDK_CHIP_NAME "CH572")
-elseif(CHIP_SDK_RESOLVED STREQUAL "CH592" OR CHIP_SDK_RESOLVED STREQUAL "CH591")
+elseif(CHIP_IS_CH59X)
     set(SDK_CHIP_DIR "${SDK_ROOT_DIR}/CH592_DEV")
     set(SDK_CHIP_NAME "${CHIP_SDK_RESOLVED}")
 elseif(CHIP_SDK_RESOLVED STREQUAL "CH32V003")
     set(SDK_CHIP_DIR "${SDK_ROOT_DIR}/CH32V003_DEV")
     set(SDK_CHIP_NAME "CH32V003")
 else()
-    message(FATAL_ERROR "不支持的芯片：${CHIP_SDK_RESOLVED}（可选 CH572 / CH592 / CH591 / CH32V003）")
+    message(FATAL_ERROR "不支持的芯片：${CHIP_SDK_RESOLVED}（可选 CH572 / CH592 / CH591 / CH591F / CH591R / CH32V003）")
 endif()
 
 if(NOT EXISTS "${SDK_CHIP_DIR}")

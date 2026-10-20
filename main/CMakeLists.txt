@@ -10,8 +10,10 @@ if(CHIP_SDK_RESOLVED STREQUAL "CH32V003")
 else()
     # CH5xx：BLE + USB
     add_subdirectory(usb_dual)
-    # CH592 / CH591：FreeRTOS 示例 + 网关
-    if(CHIP_SDK_RESOLVED STREQUAL "CH592" OR CHIP_SDK_RESOLVED STREQUAL "CH591")
+    # BLE 功能独立测试（验证广播/连接/GATT 透传）
+    add_subdirectory(ble_test)
+    # CH59x 系列（CH592X / CH591F / CH591D / CH591R）：FreeRTOS 示例 + 网关
+    if(CHIP_IS_CH59X)
         add_subdirectory(freertos_demo)
         add_subdirectory(gateway)
     endif()

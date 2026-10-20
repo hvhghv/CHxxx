@@ -6,6 +6,7 @@
 #include "ch32fun.h"
 #include "framelink.h"
 #include "periph.h"
+#include "spi_bus.h"
 #include <string.h>
 
 /* ---------------------------------------------------------------------------
@@ -15,21 +16,7 @@
  * 每通道一个接收缓冲，大小 = 头 + 最大负载。
  * ------------------------------------------------------------------------- */
 /* 接收缓冲 = 头 8 + 最大负载 + 余量。
- * 负载上限决定能接收的最大帧：
- *   - 16bit UUID 注册：3 + 6×3 = 21B
- *   - 128bit UUID 注册：3 + 6×19 = 117B（需 >= 128）
- * 默认随 BLE_UUID128_SUPPORT：开启时 128，关闭时 48（仅 16bit UUID，省 RAM）。
- * 可通过 -DFRAMELINK_MAX_PAYLOAD=N 覆盖。 */
-#ifndef BLE_UUID128_SUPPORT
-#define BLE_UUID128_SUPPORT 0
-#endif
-#ifndef FRAMELINK_MAX_PAYLOAD
-#if BLE_UUID128_SUPPORT
-#define FRAMELINK_MAX_PAYLOAD  128
-#else
-#define FRAMELINK_MAX_PAYLOAD  48
-#endif
-#endif
+ * 负载上限决定能接收的最大帧（定义见 framelink.h 的 FRAMELINK_MAX_PAYLOAD）。 */
 #define RXBUF_SIZE   (FRAMELINK_MAX_PAYLOAD + 16)
 #define MAX_HANDLERS 10
 
@@ -83,14 +70,21 @@ int framelink_send(framelink_ch_t ch, const uint8_t *frame, uint32_t len)
 	case FRAMELINK_UART2: return periph_uart_write(2, frame, len);
 	case FRAMELINK_UART3: return periph_uart_write(3, frame, len);
 	case FRAMELINK_SPI:
+#if GW_SPI_ROLE_MASTER && GW_SPI_ROLE_SLAVE
 		if (spi_is_slave) {
-			/* 从模式：预装数据到发送 FIFO */
-			return periph_spi_slave_write(frame, len);
+			/* 从模式：加长度前缀 + 预装 FIFO + 自动拉高 INT 通知主机 */
+			return spibus_slave_send(0, frame, len);
 		} else {
-			/* 主模式：全双工收发（接收数据丢弃，复用 tx_buf） */
-			if (len > sizeof(tx_buf)) return -1;
-			return periph_spi_transfer(frame, tx_buf, len);
+			/* 主模式：加长度前缀 + 自动 CS 发送 */
+			return spibus_master_send(0, frame, len);
 		}
+#elif GW_SPI_ROLE_SLAVE
+		/* 仅从机：加长度前缀 + 预装 FIFO + 自动拉高 INT */
+		return spibus_slave_send(0, frame, len);
+#else
+		/* 仅主机：加长度前缀 + 自动 CS 发送 */
+		return spibus_master_send(0, frame, len);
+#endif
 	default: return -1;
 	}
 }
@@ -105,17 +99,13 @@ void framelink_spi_config(int is_slave, uint8_t clock_div)
 }
 
 /* ---------------------------------------------------------------------------
- * SPI 从模式轮询：把接收 FIFO 的数据喂给 framelink
+ * SPI 从模式轮询
+ * -------------------------------------------------------------------------
+ * 注意：SPI 接收已统一由 spibus_slave_poll() 处理（含长度前缀解析），
+ *       本函数保留为空实现，避免两处竞争读取 FIFO。
  * ------------------------------------------------------------------------- */
 void framelink_poll_spi(void)
 {
-	if (!spi_is_slave) return;   /* 仅从模式需要轮询接收 */
-
-	uint8_t buf[64];
-	int n = periph_spi_slave_read(buf, sizeof(buf));
-	if (n > 0) {
-		framelink_rx(FRAMELINK_SPI, buf, (uint32_t)n);
-	}
 }
 
 void framelink_send_resp(framelink_ch_t ch, uint8_t type, uint32_t message_id,

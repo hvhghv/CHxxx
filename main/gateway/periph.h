@@ -72,6 +72,8 @@ int periph_spi_slave_read(uint8_t *data, uint32_t max_len);
 
 /* 从模式：预装发送数据到 FIFO */
 int periph_spi_slave_write(const uint8_t *data, uint32_t len);
+/* 从模式：查询发送 FIFO 是否已空（1=空，0=仍有数据） */
+int periph_spi_slave_tx_empty(void);
 
 #ifdef __cplusplus
 }

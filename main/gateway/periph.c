@@ -188,6 +188,7 @@ void periph_spi_init(spi_role_t role, uint8_t clock_div)
 	/* 清空 FIFO */
 	R8_SPI0_CTRL_MOD = RB_SPI_ALL_CLEAR;
 
+#if GW_SPI_ROLE_MASTER && GW_SPI_ROLE_SLAVE
 	if (role == SPI_ROLE_MASTER) {
 		R8_SPI0_CLOCK_DIV = clock_div;
 		/* 主模式：MOSI + SCK 输出使能 */
@@ -196,6 +197,17 @@ void periph_spi_init(spi_role_t role, uint8_t clock_div)
 		/* 从模式：MISO 输出使能 + slave */
 		R8_SPI0_CTRL_MOD = RB_SPI_MISO_OE | RB_SPI_MODE_SLAVE;
 	}
+#elif GW_SPI_ROLE_MASTER
+	/* 仅主机（编译期裁剪，忽略 role 参数） */
+	(void)role;
+	R8_SPI0_CLOCK_DIV = clock_div;
+	R8_SPI0_CTRL_MOD = RB_SPI_MOSI_OE | RB_SPI_SCK_OE;
+#else
+	/* 仅从机（编译期裁剪） */
+	(void)role;
+	(void)clock_div;
+	R8_SPI0_CTRL_MOD = RB_SPI_MISO_OE | RB_SPI_MODE_SLAVE;
+#endif
 
 	/* 使能 BUFFER/FIFO 自动清 IF_BYTE_END 标志 */
 	R8_SPI0_CTRL_CFG |= RB_SPI_AUTO_IF;
@@ -255,4 +267,11 @@ int periph_spi_slave_write(const uint8_t *data, uint32_t len)
 		n++;
 	}
 	return (int)n;
+}
+
+/* 从模式：查询发送 FIFO 是否已空（主机已取走全部数据）
+ * 返回 1=空，0=仍有数据 */
+int periph_spi_slave_tx_empty(void)
+{
+	return (R8_SPI0_FIFO_COUNT == 0) ? 1 : 0;
 }

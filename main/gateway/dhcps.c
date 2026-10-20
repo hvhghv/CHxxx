@@ -10,6 +10,9 @@
 
 #include "ch32fun.h"
 #include "dhcps.h"
+
+#if GW_LWIP_UDP
+
 #include "lwip/udp.h"
 #include "lwip/pbuf.h"
 #include "lwip/ip_addr.h"
@@ -192,3 +195,23 @@ void dhcps_get_config(uint32_t *server_ip, uint32_t *client_ip, uint32_t *mask)
 
 int dhcps_client_count(void) { return dhcps_assigned ? 1 : 0; }
 uint32_t dhcps_client_ip(void) { return dhcps_assigned ? dhcps_offer_ip : 0; }
+
+#else /* !GW_LWIP_UDP —— 未编译 UDP：DHCP 服务器空实现 */
+
+int dhcps_start(struct netif *netif, uint32_t server_ip, uint32_t client_ip, uint32_t mask)
+{
+	(void)netif; (void)server_ip; (void)client_ip; (void)mask;
+	return -1;   /* 未编译 UDP，无法启动 */
+}
+void dhcps_stop(void) { }
+void dhcps_config(uint32_t client_ip, uint32_t mask) { (void)client_ip; (void)mask; }
+void dhcps_get_config(uint32_t *server_ip, uint32_t *client_ip, uint32_t *mask)
+{
+	if (server_ip) *server_ip = 0;
+	if (client_ip) *client_ip = 0;
+	if (mask)      *mask = 0;
+}
+int dhcps_client_count(void) { return 0; }
+uint32_t dhcps_client_ip(void) { return 0; }
+
+#endif /* GW_LWIP_UDP */

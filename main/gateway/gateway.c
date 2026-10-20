@@ -39,6 +39,7 @@
 #include "bleapp.h"
 #include "blemgr.h"
 #include "dhcps.h"
+#include "spi_bus.h"
 
 /* LWIP */
 #include "lwip/init.h"
@@ -177,7 +178,8 @@ static void cdc_puts(void *t, const char *s)
 	tx_push(t, (const uint8_t *)s, (uint32_t)strlen(s));
 }
 
-/* 输出无符号十进制（省 mini_snprintf） */
+/* 输出无符号十进制（省 mini_snprintf；仅终端命令使用） */
+#if GW_TERM
 static void cdc_put_u32(void *t, uint32_t v)
 {
 	char b[11];
@@ -193,6 +195,7 @@ static void cdc_put_i32(void *t, int32_t v)
 	if (v < 0) { cdc_puts(t, "-"); cdc_put_u32(t, (uint32_t)(-v)); }
 	else cdc_put_u32(t, (uint32_t)v);
 }
+#endif /* GW_TERM */
 
 /* ===========================================================================
  * RNDIS 缓冲
@@ -270,7 +273,11 @@ void HandleDataOut(struct _USBState *ctx, int endp, uint8_t *data, int len)
 	if (len <= 0 || !data) return;
 
 	switch (endp) {
+#if GW_TERM
 	case EP_A: rb_push(&rb_a, data, (uint32_t)len); break;
+#else
+	case EP_A: break;   /* 终端命令已裁剪（GW_TERM=0）：丢弃输入 */
+#endif
 	case EP_B: rb_push(&rb_f[0], data, (uint32_t)len); break;   /* UART0 */
 	case EP_C: rb_push(&rb_f[1], data, (uint32_t)len); break;   /* UART1 */
 #if GW_CDC_COUNT >= 4
@@ -309,7 +316,10 @@ int HandleSetupCustom(struct _USBState *ctx, int setup_code)
 
 /* ===========================================================================
  * 终端命令（状态机）
+ * ===========================================================================
+ * GW_TERM=0 时整段命令处理被裁掉，CDC-A 仅保留日志输出（cdc_puts）。
  * =========================================================================== */
+#if GW_TERM
 static char term_line[96];
 static int  term_pos = 0;
 
@@ -432,17 +442,53 @@ static void cmd_frame(const char *arg)
 
 static void cmd_spi(const char *p)
 {
+#if GW_SPI_ROLE_MASTER
 	if (strncmp(p, "master", 6) == 0) {
 		p += 6;
 		while (*p == ' ') p++;
 		uint8_t div = (*p >= '0' && *p <= '9') ? (uint8_t)atoi(p) : 4;
 		framelink_spi_config(0, div);
+		spibus_reload();
 		cdc_puts(&tx_a, "SPI master\r\n");
-	} else if (strncmp(p, "slave", 5) == 0) {
+	} else
+#endif
+#if GW_SPI_ROLE_SLAVE
+	if (strncmp(p, "slave", 5) == 0) {
 		framelink_spi_config(1, 0);
+		spibus_reload();
 		cdc_puts(&tx_a, "SPI slave\r\n");
+	} else
+#endif
+	if (strncmp(p, "dev", 3) == 0) {
+		/* spi dev：列出设备（CS/INT 引脚）—— 仅 CH592（CH591 用 HTTP API） */
+#if GW_SPI_MULTIDEV
+		cdc_puts(&tx_a, "SPI ");
+		cdc_puts(&tx_a, spibus_is_slave() ? "slave" : "master");
+		cdc_puts(&tx_a, " devs=");
+		cdc_put_i32(&tx_a, spibus_dev_count());
+		cdc_puts(&tx_a, "\r\n");
+		for (int d = 0; d < GW_SPI_MAX_DEV; d++) {
+			int cs = -1, ip = -1;
+			if (spibus_dev_info(d, &cs, &ip) != 0) continue;
+			cdc_puts(&tx_a, "  dev");
+			cdc_put_i32(&tx_a, d);
+			cdc_puts(&tx_a, " cs=");
+			if (cs >= 0) cdc_puts(&tx_a, pinmux_pin_name(cs)); else cdc_puts(&tx_a, "-");
+			cdc_puts(&tx_a, " int=");
+			if (ip >= 0) cdc_puts(&tx_a, pinmux_pin_name(ip)); else cdc_puts(&tx_a, "-");
+			cdc_puts(&tx_a, "\r\n");
+		}
+#else
+		cdc_puts(&tx_a, "SPI multi-dev disabled\r\n");
+#endif
 	} else {
-		cdc_puts(&tx_a, "spi master [d]|slave\r\n");
+#if GW_SPI_ROLE_MASTER && GW_SPI_ROLE_SLAVE
+		cdc_puts(&tx_a, "spi master [d]|slave|dev\r\n");
+#elif GW_SPI_ROLE_MASTER
+		cdc_puts(&tx_a, "spi master [d]|dev\r\n");
+#else
+		cdc_puts(&tx_a, "spi slave|dev\r\n");
+#endif
 	}
 }
 
@@ -882,6 +928,7 @@ static void term_handle_char(int ch)
 		tx_push(&tx_a, &c, 1);   /* 回显 */
 	}
 }
+#endif /* GW_TERM */
 
 /* ===========================================================================
  * 主循环各步骤
@@ -995,10 +1042,15 @@ static void uart_fwd_poll(void)
 
 static void term_poll(void)
 {
+#if GW_TERM
 	int ch;
 	while ((ch = rb_pop(&rb_a)) >= 0) {
 		term_handle_char(ch);
 	}
+#else
+	/* 终端命令已裁剪（GW_TERM=0）：丢弃 CDC-A 输入，仅保留日志输出 */
+	rb_a.head = rb_a.tail = 0;
+#endif
 }
 
 /* CDC 数据口 → UART 转发（按绑定关系） */
@@ -1074,13 +1126,20 @@ int main(void)
 	/* BLE 帧命令管理器（应用芯片注册服务/透传） */
 	blemgr_init();
 
+	/* SPI 多设备总线（扫描引脚配置，建立设备表） */
+	spibus_init();
+
 	cdc_puts(&tx_a, "\r\nCH591 Gateway (nosys)\r\n");
 #if GW_CDC_COUNT >= 4
 	cdc_puts(&tx_a, "Port A: terminal | B/C/D: UART0/1/2 | RNDIS: net\r\n");
 #else
 	cdc_puts(&tx_a, "Port A: terminal | B/C: UART0/1 | RNDIS: net\r\n");
 #endif
+#if GW_TERM
 	cdc_puts(&tx_a, "Type 'help' for commands.\r\n> ");
+#else
+	cdc_puts(&tx_a, "Terminal disabled (log only).\r\n");
+#endif
 
 	/* 主循环 */
 	while (1) {
@@ -1088,6 +1147,7 @@ int main(void)
 		sys_check_timeouts();    /* LWIP 超时 */
 		netif_poll();            /* RNDIS 接收注入 */
 		frame_poll();            /* 帧链路轮询（串口）*/
+		spi_bus_poll();          /* SPI 多设备轮询（主机 INT / 从机 FIFO）*/
 		uart_fwd_poll();         /* CDC 转发轮询（串口→CDC）*/
 		tx_flush(&tx_a, EP_A);   /* flush 发送队列 */
 		/* 转发口 flush：端点号数组（索引 = UART 号） */

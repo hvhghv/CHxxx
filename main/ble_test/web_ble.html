@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CH572 BLE ↔ USB 透传</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --ok: #3fb950;
+    --err: #f85149;
+    --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 12px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .status {
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: #21262d;
+    border: 1px solid var(--border);
+  }
+  .status.connected { color: var(--ok); border-color: var(--ok); }
+  .status.error { color: var(--err); border-color: var(--err); }
+  .status.connecting { color: var(--warn); border-color: var(--warn); }
+
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #21262d;
+    color: var(--text);
+    cursor: pointer;
+    transition: .15s;
+  }
+  button:hover:not(:disabled) { background: #30363d; border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  @media (max-width: 800px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  }
+  .pane {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .pane-head {
+    padding: 8px 14px;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 14px;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .log .tx { color: var(--accent); }
+  .log .rx { color: var(--ok); }
+  .log .sys { color: var(--muted); font-style: italic; }
+  .log .err { color: var(--err); }
+
+  .input-bar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .input-bar input {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #0d1117;
+    color: var(--text);
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 13px;
+    outline: none;
+  }
+  .input-bar input:focus { border-color: var(--accent); }
+  .opts {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .opts label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .opts input[type=checkbox] { accent-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔵 CH572 BLE ↔ USB 透传</h1>
+  <span id="status" class="status">未连接</span>
+  <button id="btnConnect" class="primary">连接蓝牙</button>
+  <button id="btnDisconnect" disabled>断开</button>
+  <div class="opts">
+    <label><input type="checkbox" id="optHex"> HEX 显示</label>
+    <label><input type="checkbox" id="optEcho" checked> 本地回显</label>
+    <label><input type="checkbox" id="optAutoScroll" checked> 自动滚动</label>
+  </div>
+</header>
+
+<main>
+  <!-- 左：发送 -->
+  <section class="pane">
+    <div class="pane-head">
+      <span>📤 发送（浏览器 → BLE → USB 串口 B）</span>
+      <button id="btnClearTx" style="font-size:11px;padding:2px 8px;">清空</button>
+    </div>
+    <div id="logTx" class="log"></div>
+    <div class="input-bar">
+      <input id="input" type="text" placeholder="输入要发送的数据，回车发送…" disabled>
+      <button id="btnSend" disabled>发送</button>
+    </div>
+  </section>
+
+  <!-- 右：接收 -->
+  <section class="pane">
+    <div class="pane-head">
+      <span>📥 接收（USB 串口 B → BLE → 浏览器）</span>
+      <button id="btnClearRx" style="font-size:11px;padding:2px 8px;">清空</button>
+    </div>
+    <div id="logRx" class="log"></div>
+  </section>
+</main>
+
+<script>
+/* ===========================================================================
+ * CH572 BLE ↔ USB 透传 - Web Bluetooth 客户端
+ * ===========================================================================
+ * 服务 UUID : 0xFFF0
+ * RX 特征   : 0xFFF1  (Write / WriteWithoutResponse)  浏览器 → USB
+ * TX 特征   : 0xFFF2  (Notify)                        USB → 浏览器
+ * =========================================================================== */
+
+const SERVICE_UUID = 0xfff0;
+const CHAR_RX_UUID = 0xfff1;   // 写入
+const CHAR_TX_UUID = 0xfff2;   // 通知
+
+let device = null;
+let server = null;
+let charRx = null;   // 写入特征
+let charTx = null;   // 通知特征
+
+const $ = id => document.getElementById(id);
+const statusEl = $('status');
+const logTx = $('logTx');
+const logRx = $('logRx');
+const input = $('input');
+
+/* ---------------------------------------------------------------------------
+ * 日志
+ * ------------------------------------------------------------------------ */
+function appendLog(el, text, cls) {
+  const span = document.createElement('span');
+  span.className = cls || '';
+  span.textContent = text;
+  el.appendChild(span);
+  if ($('optAutoScroll').checked) el.scrollTop = el.scrollHeight;
+}
+
+function logSys(msg) {
+  appendLog(logTx, `[系统] ${msg}\n`, 'sys');
+}
+
+function logErr(msg) {
+  appendLog(logTx, `[错误] ${msg}\n`, 'err');
+}
+
+/* ---------------------------------------------------------------------------
+ * 格式化数据
+ * ------------------------------------------------------------------------ */
+function formatBytes(bytes) {
+  if ($('optHex').checked) {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ') + '\n';
+  }
+  return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+}
+
+function parseInput(str) {
+  if ($('optHex').checked) {
+    // HEX 模式：忽略空格/逗号，每 2 字符一个字节
+    const hex = str.replace(/[\s,]/g, '');
+    if (hex.length % 2 !== 0) throw new Error('HEX 长度必须是偶数');
+    if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('包含非 HEX 字符');
+    const out = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < out.length; i++) {
+      out[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return out;
+  }
+  // 文本模式：UTF-8 编码
+  return new TextEncoder().encode(str);
+}
+
+/* ---------------------------------------------------------------------------
+ * 状态更新
+ * ------------------------------------------------------------------------ */
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+function setConnected(connected) {
+  $('btnConnect').disabled = connected;
+  $('btnDisconnect').disabled = !connected;
+  input.disabled = !connected;
+  $('btnSend').disabled = !connected;
+}
+
+/* ---------------------------------------------------------------------------
+ * 连接
+ * ------------------------------------------------------------------------ */
+async function connect() {
+  if (!navigator.bluetooth) {
+    logErr('此浏览器不支持 Web Bluetooth。请用 Chrome / Edge (桌面版)，并确保通过 https:// 或 localhost 访问。');
+    setStatus('不支持', 'error');
+    return;
+  }
+
+  try {
+    setStatus('连接中…', 'connecting');
+    logSys('请求蓝牙设备（请选择 "CH572-BLE"）…');
+
+    device = await navigator.bluetooth.requestDevice({
+      filters: [
+        { services: [SERVICE_UUID] },
+        { namePrefix: 'CH572' }
+      ],
+      optionalServices: [SERVICE_UUID]
+    });
+
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+
+    logSys(`已选择: ${device.name || '(无名)'}`);
+    server = await device.gatt.connect();
+    logSys('GATT 已连接，发现服务…');
+
+    const service = await server.getPrimaryService(SERVICE_UUID);
+
+    charRx = await service.getCharacteristic(CHAR_RX_UUID);
+    charTx = await service.getCharacteristic(CHAR_TX_UUID);
+
+    // 订阅通知
+    await charTx.startNotifications();
+    charTx.addEventListener('characteristicvaluechanged', onNotify);
+    logSys('已订阅 TX 通知 (0xFFF2)');
+
+    setStatus(`已连接: ${device.name || 'CH572'}`, 'connected');
+    logSys('✅ 透传就绪。发送的数据会经 BLE → USB 串口 B；串口 B 收到的数据会通知到这里。');
+
+    input.focus();
+  } catch (e) {
+    console.error(e);
+    if (e.name === 'NotFoundError') {
+      logSys('用户取消了选择。');
+      setStatus('未连接', '');
+    } else {
+      logErr(e.message || e);
+      setStatus('连接失败', 'error');
+    }
+    cleanup();
+  }
+}
+
+function onDisconnected() {
+  logSys('⚠️ 设备已断开');
+  setStatus('已断开', '');
+  cleanup();
+}
+
+function cleanup() {
+  charRx = null;
+  charTx = null;
+  server = null;
+  device = null;
+  setConnected(false);
+}
+
+async function disconnect() {
+  if (device && device.gatt.connected) {
+    try {
+      if (charTx) await charTx.stopNotifications();
+    } catch (e) { /* ignore */ }
+    device.gatt.disconnect();
+  }
+  cleanup();
+  setStatus('未连接', '');
+  logSys('已主动断开');
+}
+
+/* ---------------------------------------------------------------------------
+ * 接收（BLE → 浏览器）
+ * ------------------------------------------------------------------------ */
+function onNotify(event) {
+  const value = event.target.value;
+  const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  appendLog(logRx, formatBytes(bytes), 'rx');
+}
+
+/* ---------------------------------------------------------------------------
+ * 发送（浏览器 → BLE）
+ * ------------------------------------------------------------------------ */
+async function send() {
+  const text = input.value;
+  if (!charRx) return;
+
+  let bytes;
+  try {
+    bytes = parseInput(text);
+  } catch (e) {
+    logErr('输入格式错误: ' + e.message);
+    return;
+  }
+
+  if (bytes.length === 0) return;
+
+  try {
+    // BLE 单包最大 20 字节（默认 MTU 23 - 3），分块发送
+    const CHUNK = 20;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      const chunk = bytes.slice(i, i + CHUNK);
+      // 优先用 writeValueWithoutResponse（更快），失败则用 writeValue
+      if (charRx.properties.writeWithoutResponse) {
+        await charRx.writeValueWithoutResponse(chunk);
+      } else {
+        await charRx.writeValue(chunk);
+      }
+    }
+    if ($('optEcho').checked) {
+      appendLog(logTx, formatBytes(bytes), 'tx');
+    }
+    input.value = '';
+  } catch (e) {
+    logErr('发送失败: ' + (e.message || e));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 事件绑定
+ * ------------------------------------------------------------------------ */
+$('btnConnect').addEventListener('click', connect);
+$('btnDisconnect').addEventListener('click', disconnect);
+$('btnSend').addEventListener('click', send);
+$('btnClearTx').addEventListener('click', () => logTx.textContent = '');
+$('btnClearRx').addEventListener('click', () => logRx.textContent = '');
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') send();
+});
+
+/* 启动提示 */
+if (!navigator.bluetooth) {
+  logErr('⚠️ 当前浏览器不支持 Web Bluetooth。');
+  logSys('要求：Chrome / Edge (桌面版)，通过 https:// 或 http://localhost 访问。');
+  setStatus('不支持', 'error');
+} else {
+  logSys('点击「连接蓝牙」，选择名为 "CH572-BLE" 的设备。');
+  logSys('提示：先在串口 A 输入 adv 启动广播。');
+}
+</script>
+</body>
+</html>
