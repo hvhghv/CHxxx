@@ -1,6 +1,7 @@
-# CH5xx / CH32V003 项目模板（多芯片）
+# CH5xx / CH32 项目模板（多芯片）
 
-基于 **CH5xx / CH32V003 Lite SDK** 的 CH572 / CH592 / CH591 / CH32V003 开发项目模板。
+基于 **CH5xx / CH32 Lite SDK** 的 CH572 / CH585 / CH584 / CH592 / CH591 /
+CH32V003 / CH32X035 / CH32L103 / CH32V203 开发项目模板。
 
 纯 GCC 工具链（内置）、CMake 构建、支持 BLE / USB，无需 MounRiver Studio。
 
@@ -18,6 +19,8 @@
 ├── Makefile                # 快捷脚本（make）
 ├── .gitignore
 ├── .github/workflows/      # GitHub Actions（build / release / pages）
+├── docs/
+│   └── CHIP_COMPARISON.md  # ★ 芯片选型对照手册（按型号，含封装后缀）
 ├── scripts/
 │   └── gen_matrix.sh       # 扫描 build_targets.txt 生成 CI 矩阵
 ├── web/                    # Web UI 前端（GitHub Pages 部署）
@@ -26,14 +29,20 @@
 ├── main/                   # 应用代码（多芯片共用）
 │   ├── CMakeLists.txt
 │   ├── usb_dual/           # 双 USB 串口设备（CH5xx 示例）
+│   ├── ble_test/           # BLE 收发回传测试（CH5xx 示例）
 │   ├── freertos_demo/      # FreeRTOS 多任务（CH592/CH591 示例）
 │   ├── gateway/            # 多功能网关（CH592/CH591）
-│   └── blink_v003/         # LED 闪烁（CH32V003 示例）
+│   ├── blink_v003/         # LED 闪烁（CH32V003 示例）
+│   └── blink_ch32/         # LED 闪烁（CH32X035/L103/V203 示例）
 ├── sdk/                    # SDK 集合
 │   ├── common/             # 共享：工具链、ch32fun、USB 栈、构建逻辑
 │   ├── CH572_DEV/          # CH572 专属（BLE 库）
-│   ├── CH592_DEV/          # CH592 / CH591 专属（BLE 库 + FreeRTOS）
-│   └── CH32V003_DEV/       # CH32V003 专属（无 BLE/USB）
+│   ├── CH585_DEV/          # CH585 / CH584 专属（BLE 5.4 库 + HAL）
+│   ├── CH592_DEV/          # CH592 / CH591 专属（BLE 库 + FreeRTOS + LWIP）
+│   ├── CH32V003_DEV/       # CH32V003 专属（无 BLE/USB）
+│   ├── CH32X035_DEV/       # CH32X035 专属（USB FS + PDUSB，无 BLE）
+│   ├── CH32L103_DEV/       # CH32L103 专属（USB FS + PDUSB，无 BLE）
+│   └── CH32V20x_DEV/       # CH32V203 专属（双 USB）
 ├── tool/
 │   └── wchisp/             # USB 烧录工具（wchisp.exe）
 └── tmp/                    # 参考源码（ch32fun / CH572EVT 副本，已 gitignore）
@@ -41,6 +50,23 @@
 
 > 每个 `main/<项目>/build_targets.txt` 声明该项目支持/要构建的芯片，
 > GitHub Actions 据此生成构建矩阵。
+
+---
+
+## 芯片选型
+
+支持 **24 个具体型号**（含封装后缀），完整参数对照见
+[`docs/CHIP_COMPARISON.md`](docs/CHIP_COMPARISON.md)：
+
+| 系列 | 型号 |
+|---|---|
+| CH57x | CH572D / CH572Q / CH572R |
+| CH59x | CH592X / CH592F / CH592A / CH592D / CH591F / CH591D / CH591R |
+| CH58x | CH585M / CH585F / CH585C / CH585D / CH584M / CH584X / CH584F |
+| CH32V003 | CH32V003F4P6 / F4U6 / A4M6 / J4M6 |
+| CH32X035 | R8T6 / C8T6 / G8U6 / G8R6 / F8U6 / F7P6 / D8U6 / X033F8P6 |
+| CH32L103 | C8T6 / K8U6 / K8U7 / G8R6 / F8U6 / F8P6 |
+| CH32V203 | F6P6 / F8P6 / G6U6 / G8R6 / K8T6 / C6T6 / C8T6 / RBT6 / K8U7 |
 
 ---
 
@@ -105,7 +131,8 @@ make help         # 查看全部命令
 项目根目录的 `default_target.txt` 同时配置**目标芯片**和**默认固件**：
 
 ```
-chip   = CH572        # CH572 / CH592 / CH591 / CH32V003
+chip   = CH572        # CH572 / CH585 / CH584 / CH592 / CH591 /
+                      # CH32V003 / CH32X035 / CH32L103 / CH32V203
 target = usb_dual     # 对应 main/<固件名>/
 ```
 

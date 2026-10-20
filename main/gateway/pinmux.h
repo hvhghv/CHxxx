@@ -71,11 +71,20 @@ typedef enum {
 } pin_spi_role_t;
 
 /* SPI 引脚字段约定（PIN_FUNC_SPI）：
- *   param1 = 设备号（CS/INT 用，0..GW_SPI_MAX_DEV-1）；SCK/MOSI/MISO 忽略
+ *   param1 = CS：设备号（0..GW_SPI_MAX_DEV-1）
+ *            INT：共享中断线 ID（0..GW_SPI_MAX_DEV-1）
+ *            SCK/MOSI/MISO：忽略
  *   param2 = pin_spi_role_t
  *   flags  = bit0: INT 有效电平（0=低有效，1=高有效）
  *            bit1: SPI 角色（0=主机，1=从机）—— 仅 SCK 引脚上有效，作为总线角色标志
- *   arg1   = INT 触发方式（pin_irq_t）；CS 忽略 */
+ *   arg1   = INT 触发方式（pin_irq_t）；CS 忽略
+ *   arg2   = INT 绑定的设备号（支持多设备共享一条 INT 线）
+ *            独占时 arg2 == param1；共享时多个 INT 配置项 param1 相同、arg2 不同
+ *
+ * 共享 INT 线示例（设备 0 和 1 共用 INT0）：
+ *   引脚 A: func=SPI, param1=0(线0), param2=INT, arg2=0(设备0), flags=极性
+ *   引脚 B: func=SPI, param1=0(线0), param2=INT, arg2=1(设备1), flags=极性
+ *   主机检测到线 0 有效后，依次用设备 0/1 的 CS 读取试探。 */
 #define PIN_FLAG_SPI_INT_HIGH   0x01   /* INT 高有效 */
 #define PIN_FLAG_SPI_SLAVE      0x02   /* SPI 从机模式 */
 
@@ -171,7 +180,8 @@ typedef struct {
 	uint8_t  flags;         /* 功能相关标志（UART：bit0-1=CDC 绑定号） */
 	uint8_t  param1;        /* 通用参数（如 UART 号、PWM 通道） */
 	uint8_t  param2;        /* 通用参数 */
-	uint8_t  arg1;          /* 扩展参数（GPIO 输出电平 0/1） */
+	uint8_t  arg1;          /* 扩展参数（GPIO 输出电平 0/1；INT 触发方式） */
+	uint8_t  arg2;          /* 扩展参数 2（SPI INT：绑定的设备号掩码） */
 	uint16_t uart_dl;       /* UART 波特率分频值（0=默认 115200） */
 } pin_cfg_t;
 

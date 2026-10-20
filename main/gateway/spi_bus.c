@@ -40,6 +40,12 @@ static uint8_t m_mstr_rxbuf[SPIBUS_MSTR_RX_MAX + 2];
 
 /* ---------------------------------------------------------------------------
  * 设备表
+ * -------------------------------------------------------------------------
+ * INT 共享机制：INT 引脚的 param1 = 共享中断线 ID（0..GW_SPI_MAX_DEV-1）。
+ *   - 独占：每个设备用自己的 INT 线（ID 互不相同，通常 ID == 设备号）
+ *   - 共享：多个设备配置同一条 INT 线（同一引脚、同一 ID）
+ * 主机检测到某条 INT 有效时，遍历所有绑定该 INT 线的设备，逐个 CS 读取试探，
+ * 只有真正有数据的设备才会返回有效长度前缀（其余读回 0xFFFF → plen 超限被丢弃）。
  * ------------------------------------------------------------------------- */
 typedef struct {
 	int8_t cs_pin;      /* CS 引脚（紧凑编号，-1=无） */
@@ -52,6 +58,15 @@ static spibus_dev_t m_dev[GW_SPI_MAX_DEV];
 static int m_is_slave = 0;      /* 0=主机，1=从机 */
 static int m_dev_count = 0;
 
+/* INT 线 → 设备映射（共享 INT 时一条线对应多个设备）
+ *   m_int_dev[line][k] = 绑定该 INT 线的第 k 个设备号（-1 结束）
+ *   m_int_used[line]   = 该 INT 线是否被使用
+ * 仅主机模式需要（从机模式 INT 是输出，无共享概念） */
+#if GW_SPI_ROLE_MASTER
+static int8_t  m_int_dev[GW_SPI_MAX_DEV][GW_SPI_MAX_DEV];
+static uint8_t m_int_used[GW_SPI_MAX_DEV];
+#endif
+
 /* ---------------------------------------------------------------------------
  * 扫描引脚配置，建立设备表
  * ------------------------------------------------------------------------- */
@@ -60,6 +75,10 @@ void spibus_reload(void)
 	memset(m_dev, 0, sizeof(m_dev));
 	m_is_slave = 0;
 	m_dev_count = 0;
+#if GW_SPI_ROLE_MASTER
+	memset(m_int_dev, 0xFF, sizeof(m_int_dev));   /* 全部填 -1 */
+	memset(m_int_used, 0, sizeof(m_int_used));
+#endif
 
 	/* 先确定总线角色（看 SCK 引脚 flags bit1） */
 	for (int i = 0; i < PIN_COUNT; i++) {
@@ -70,7 +89,7 @@ void spibus_reload(void)
 		}
 	}
 
-	/* 收集 CS / INT 引脚（按 param1 设备号归位） */
+	/* 第一遍：收集 CS 引脚（按 param1 = 设备号归位） */
 	for (int i = 0; i < PIN_COUNT; i++) {
 		const pin_cfg_t *c = &g_pin_cfg[i];
 		if (c->func != PIN_FUNC_SPI) continue;
@@ -80,11 +99,30 @@ void spibus_reload(void)
 		if (c->param2 == PIN_SPI_CS) {
 			m_dev[dev].cs_pin = (int8_t)i;
 			m_dev[dev].used = 1;
-		} else if (c->param2 == PIN_SPI_INT) {
-			m_dev[dev].int_pin = (int8_t)i;
-			m_dev[dev].int_high = (c->flags & PIN_FLAG_SPI_INT_HIGH) ? 1 : 0;
-			m_dev[dev].used = 1;
 		}
+	}
+
+	/* 第二遍：收集 INT 引脚（按 param1 = 共享中断线 ID 归位）
+	 * 同一条 INT 线上可绑定多个设备：arg2 = 该 INT 线所属的设备号 */
+	for (int i = 0; i < PIN_COUNT; i++) {
+		const pin_cfg_t *c = &g_pin_cfg[i];
+		if (c->func != PIN_FUNC_SPI || c->param2 != PIN_SPI_INT) continue;
+		uint8_t line = c->param1;
+		if (line >= GW_SPI_MAX_DEV) continue;
+
+		uint8_t dev = c->arg2;
+		if (dev >= GW_SPI_MAX_DEV) continue;
+
+		m_dev[dev].int_pin = (int8_t)i;
+		m_dev[dev].int_high = (c->flags & PIN_FLAG_SPI_INT_HIGH) ? 1 : 0;
+		m_dev[dev].used = 1;
+#if GW_SPI_ROLE_MASTER
+		/* 建立 INT 线 → 设备反向索引 */
+		if (!m_int_used[line]) m_int_used[line] = 1;
+		for (int k = 0; k < GW_SPI_MAX_DEV; k++) {
+			if (m_int_dev[line][k] < 0) { m_int_dev[line][k] = (int8_t)dev; break; }
+		}
+#endif
 	}
 
 	/* 统计有效设备（至少有一个 CS 或 INT） */
@@ -109,17 +147,56 @@ int spibus_dev_info(int dev, int *cs_pin, int *int_pin)
 	return 0;
 }
 
+/* 查询某条 INT 线上绑定的设备数（共享中断时 >1） */
+int spibus_int_line_dev_count(int line)
+{
+#if GW_SPI_ROLE_MASTER
+	if (line < 0 || line >= GW_SPI_MAX_DEV || !m_int_used[line]) return 0;
+	int n = 0;
+	for (int k = 0; k < GW_SPI_MAX_DEV; k++) {
+		if (m_int_dev[line][k] < 0) break;
+		n++;
+	}
+	return n;
+#else
+	(void)line;
+	return 0;
+#endif
+}
+
+/* 查询某条 INT 线上第 idx 个设备的设备号（-1=无） */
+int spibus_int_line_dev(int line, int idx)
+{
+#if GW_SPI_ROLE_MASTER
+	if (line < 0 || line >= GW_SPI_MAX_DEV || !m_int_used[line]) return -1;
+	if (idx < 0 || idx >= GW_SPI_MAX_DEV) return -1;
+	return m_int_dev[line][idx];
+#else
+	(void)line; (void)idx;
+	return -1;
+#endif
+}
+
 /* ---------------------------------------------------------------------------
- * 主机模式：读取 INT 线是否有效
+ * 主机模式：读取指定 INT 线是否有效
  * ------------------------------------------------------------------------- */
 #if GW_SPI_ROLE_MASTER
-static int int_active(int dev)
+/* 读取某条 INT 线（line）的电平，返回 1=有效，0=无效 */
+static int int_line_active(int line)
 {
-	const spibus_dev_t *d = &m_dev[dev];
-	if (d->int_pin < 0) return 0;
-	int lv = pinmux_gpio_read(d->int_pin);
+	if (line < 0 || line >= GW_SPI_MAX_DEV || !m_int_used[line]) return 0;
+	/* 该 INT 线的引脚 = 第一个绑定设备的 int_pin */
+	int8_t ip = -1;
+	uint8_t high = 0;
+	for (int k = 0; k < GW_SPI_MAX_DEV; k++) {
+		int d = m_int_dev[line][k];
+		if (d < 0) break;
+		if (m_dev[d].int_pin >= 0) { ip = m_dev[d].int_pin; high = m_dev[d].int_high; break; }
+	}
+	if (ip < 0) return 0;
+	int lv = pinmux_gpio_read(ip);
 	if (lv < 0) return 0;
-	return d->int_high ? (lv != 0) : (lv == 0);
+	return high ? (lv != 0) : (lv == 0);
 }
 
 /* ---------------------------------------------------------------------------
@@ -159,52 +236,73 @@ int spibus_master_send(int dev, const uint8_t *data, uint32_t len)
 	return (r == (int)total) ? (int)len : -1;
 }
 
+/* 主机模式：从单个设备读取一帧（CS 拉低 → 读长度前缀 → 读满 PAYLOAD → CS 释放）
+ * 返回 1=成功读到一帧（或空帧），0=该设备无数据，-1=错误
+ * on_data 非 NULL 时回调（空帧不回调） */
+static int master_read_dev(int dev, spibus_rx_cb_t on_data)
+{
+	if (dev < 0 || dev >= GW_SPI_MAX_DEV || !m_dev[dev].used) return -1;
+
+	uint8_t *txbuf = m_mstr_txbuf;
+	uint8_t *rxbuf = m_mstr_rxbuf;
+	int8_t cs = m_dev[dev].cs_pin;
+	int ret = 0;
+
+	if (cs >= 0) pinmux_gpio_write(cs, 0);  /* CS 拉低，整帧保持 */
+
+	/* 读 2 字节长度前缀 */
+	memset(txbuf, 0xFF, 2);
+	if (periph_spi_transfer(txbuf, rxbuf, 2) == 2) {
+		uint32_t plen = ((uint32_t)rxbuf[0] << 8) | rxbuf[1];
+
+		if (plen == 0) {
+			ret = 1;                        /* 空帧：该设备确实无数据 */
+		} else if (plen <= SPIBUS_MSTR_RX_MAX) {
+			/* 读满 PAYLOAD */
+			memset(txbuf, 0xFF, plen);
+			if (periph_spi_transfer(txbuf, rxbuf, plen) == (int)plen) {
+				if (on_data) on_data(dev, rxbuf, plen);
+				ret = 1;
+			}
+		}
+		/* plen 超限 → 读回 0xFFFF（无设备驱动 MISO），视为该设备无数据 */
+	}
+
+	if (cs >= 0) pinmux_gpio_write(cs, 1);  /* CS 释放 */
+	return ret;
+}
+
 /* ---------------------------------------------------------------------------
- * 主机模式：轮询 INT，自动 CS + 长度前缀解析 + 读满整帧
+ * 主机模式：轮询 INT 线，支持共享中断
  * -------------------------------------------------------------------------
  * 流程：
- *   ① 检测 INT 有效
- *   ② CS 拉低，读 2 字节长度前缀
- *   ③ 按 LEN 连续读满 PAYLOAD（从机 FIFO 8 字节，需多次读，从机自动续传）
- *   ④ CS 释放，回调 on_data(dev, payload, LEN)
+ *   ① 遍历每条 INT 线，检测是否有效
+ *   ② INT 有效 → 遍历绑定该线的所有设备，逐个 CS 读取试探
+ *      有数据的设备返回有效长度前缀 → 读满 PAYLOAD → 回调
+ *      无数据的设备读回 0xFFFF（plen 超限）→ 跳过
+ *   ③ 全部设备试完后，若 INT 仍有效（异常），下一轮继续
+ *
+ * 独占模式（每设备一条 INT 线）：每条线只绑定 1 个设备，行为与原来一致。
+ * 共享模式（多设备共用一条 INT 线）：一次中断会遍历该线上的所有设备。
  * ------------------------------------------------------------------------- */
 int spibus_master_poll(spibus_rx_cb_t on_data)
 {
 	if (m_is_slave) return 0;
 
-	uint8_t *txbuf = m_mstr_txbuf;
-	uint8_t *rxbuf = m_mstr_rxbuf;
 	int handled = 0;
 
-	for (int d = 0; d < GW_SPI_MAX_DEV; d++) {
-		if (!m_dev[d].used) continue;
-		if (!int_active(d)) continue;           /* 无中断 */
+	for (int line = 0; line < GW_SPI_MAX_DEV; line++) {
+		if (!m_int_used[line]) continue;
+		if (!int_line_active(line)) continue;   /* 该 INT 线无中断 */
 
-		int8_t cs = m_dev[d].cs_pin;
-		int ok = 0;
+		/* 遍历绑定该 INT 线的所有设备 */
+		for (int k = 0; k < GW_SPI_MAX_DEV; k++) {
+			int d = m_int_dev[line][k];
+			if (d < 0) break;
+			if (m_dev[d].cs_pin < 0) continue;  /* 无 CS 无法单独选中 */
 
-		if (cs >= 0) pinmux_gpio_write(cs, 0);  /* CS 拉低，整帧保持 */
-
-		/* ② 读 2 字节长度前缀 */
-		memset(txbuf, 0xFF, 2);
-		if (periph_spi_transfer(txbuf, rxbuf, 2) == 2) {
-			uint32_t plen = ((uint32_t)rxbuf[0] << 8) | rxbuf[1];
-
-			if (plen == 0) {
-				ok = 1;                         /* 空帧：合法，无数据 */
-			} else if (plen <= SPIBUS_MSTR_RX_MAX) {
-				/* ③ 读满 PAYLOAD */
-				memset(txbuf, 0xFF, plen);
-				if (periph_spi_transfer(txbuf, rxbuf, plen) == (int)plen) {
-					if (on_data) on_data(d, rxbuf, plen);
-					ok = 1;
-				}
-			}
-			/* plen 超限 → 丢弃（ok=0，不回调） */
+			if (master_read_dev(d, on_data) > 0) handled++;
 		}
-
-		if (cs >= 0) pinmux_gpio_write(cs, 1);  /* CS 释放 */
-		if (ok) handled++;
 	}
 	return handled;
 }

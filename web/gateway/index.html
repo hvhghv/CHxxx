@@ -283,7 +283,9 @@ async function refreshPins(){
     const t=await api('/api/pins');
     PINS=t.trim().split('\n').filter(Boolean).map(l=>{
       const a=l.trim().split(/\s+/);
-      return {name:a[0],func:a[1],p1:+(a[2]||0),p2:+(a[3]||0),arg:+(a[4]||0),bind:+(a[5]||0)};
+      /* 字段：name func p1 p2 arg arg2 bind */
+      return {name:a[0],func:a[1],p1:+(a[2]||0),p2:+(a[3]||0),arg:+(a[4]||0),
+              arg2:+(a[5]||0),bind:+(a[6]||0)};
     });
     buildNav(); buildPages();
     return true;
@@ -525,33 +527,43 @@ async function applySpiBus(idx){
   await call(null,`/api/pin?pin=${idx}&func=SPI0_SCK&bind=${flags}&arg=${div}`,'POST');
   toast('SPI 总线已应用','ok'); await refreshPins();
 }
-/* SPI INT 引脚配置行（有效电平 + 触发方式） */
+/* SPI INT 引脚配置行（有效电平 + 触发方式 + 绑定设备号） */
 function spiIntCfgRow(func){
-  const dev=func.slice(-1);
+  const line=func.slice(-1);          // INTn 的 n = 共享中断线 ID
   const p=PINS.find(x=>x.func===func);
   if(!p) return '';
   const idx=PINS.indexOf(p);
-  const high=(p.p1&1)?1:0;      // flags bit0 = 高有效
-  const trig=p.arg||0;          // 触发方式（pin_irq_t）
+  const high=(p.p1&1)?1:0;            // flags bit0 = 高有效
+  const trig=p.arg||0;                // 触发方式（pin_irq_t）
+  const dev=(p.arg2!==undefined)?p.arg2:line;   // arg2 = 绑定的设备号
+  // 统计该 INT 线上绑定了多少设备（共享检测）
+  const shared=PINS.filter(x=>/^SPI0_INT\d$/.test(x.func) && x.func.slice(-1)===line).length;
+  const shareHint=shared>1
+    ? `<span class=muted style="color:#e8a33d">⚠ 该 INT 线已绑定 ${shared} 个设备（共享）</span>`
+    : `<span class=muted>独占</span>`;
+  const devOpts=[0,1,2,3].map(d=>`<option value="${d}" ${dev==d?'selected':''}>设备 ${d}</option>`).join('');
   return `<div class=uartcfg>
-    <span class=uc-label>INT${dev} 配置</span>
-    <label>有效电平 <select id="ih-${dev}">
+    <span class=uc-label>INT${line} 配置</span>
+    <label>有效电平 <select id="ih-${line}">
       <option value="0" ${high===0?'selected':''}>低电平有效</option>
       <option value="1" ${high===1?'selected':''}>高电平有效</option>
     </select></label>
-    <label>触发方式 <select id="it-${dev}">
+    <label>触发方式 <select id="it-${line}">
       <option value="0" ${trig===0?'selected':''}>无</option>
       <option value="1" ${trig===1?'selected':''}>上升沿</option>
       <option value="2" ${trig===2?'selected':''}>下降沿</option>
       <option value="3" ${trig===3?'selected':''}>双边沿</option>
     </select></label>
-    <button class="btn sm" onclick="applySpiInt(${idx},'${dev}')">应用</button>
+    <label>绑定设备 <select id="id-${line}">${devOpts}</select></label>
+    ${shareHint}
+    <button class="btn sm" onclick="applySpiInt(${idx},'${line}')">应用</button>
   </div>`;
 }
-async function applySpiInt(idx,dev){
-  const high=+V('ih-'+dev), trig=+V('it-'+dev);
-  await call(null,`/api/pin?pin=${idx}&func=SPI0_INT${dev}&bind=${high}&arg=${trig}`,'POST');
-  toast('INT'+dev+' 已应用','ok'); await refreshPins();
+async function applySpiInt(idx,line){
+  const high=+V('ih-'+line), trig=+V('it-'+line), dev=+V('id-'+line);
+  // param1=共享线ID（由 func 名 SPI0_INTn 决定）；arg2=绑定的设备号
+  await call(null,`/api/pin?pin=${idx}&func=SPI0_INT${line}&bind=${high}&arg=${trig}&dev=${dev}`,'POST');
+  toast('INT'+line+' 已应用（设备 '+dev+'）','ok'); await refreshPins();
 }
 /* UART 参数配置行（模式/波特率/校验/停止位），作用于该 UART 的 TX 引脚 */
 /* 常用波特率（60MHz 下精确值优先：7.5M/DL 序列；标准档位含小误差）

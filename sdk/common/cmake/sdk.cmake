@@ -131,8 +131,12 @@ message(STATUS "CH572 烧录方式  ：${CH572_FLASH_METHOD}")
 # ---------------------------------------------------------------------------
 # TARGET_MCU_LD 对应 ch32fun.ld 中的分支：
 #   0  = CH32V003    (RAM 2K,  Flash 16K)
+#   2  = CH32V20x    (V203: 32/64/128K Flash + 10/20/64K RAM)
+#   4  = CH32X03x    (RAM 20K,  Flash 62K)
 #   9  = CH591/CH592 (RAM 26K)
 #   10 = CH57x       (RAM 12K/18K)
+#   12 = CH58x       (CH585: 448K+128K；CH584: 448K+96K)
+#   13 = CH32L103    (RAM 20K,  Flash 64K)
 if(CHIP_SDK_RESOLVED STREQUAL "CH572")
     set(CH572_MCU_PACKAGE 2  CACHE INTERNAL "MCU_PACKAGE")
     set(CH572_MCU_LD      10 CACHE INTERNAL "TARGET_MCU_LD")
@@ -183,6 +187,23 @@ elseif(CHIP_IS_CH592)
     endif()
     set(CH572_MARCH "rv32imac" CACHE STRING "RISC-V 架构扩展")
     set(CH572_MABI  "ilp32"   CACHE STRING "RISC-V ABI")
+elseif(CHIP_IS_CH58X)
+    # CH585 / CH584（数据手册 V1.6 选型表）：
+    #   Flash = 用户闪存 + 引导闪存 + 数据闪存（如 448+24+32K）
+    #   CH585: RAM 128K（MCU_PACKAGE 5）
+    #   CH584: RAM  96K（MCU_PACKAGE 4）
+    # 两者 Flash 均为 448K（CH584X 为 480K，超出模板 448K 上限，按 448K 链接）
+    set(CH572_MCU_LD      12 CACHE INTERNAL "TARGET_MCU_LD")
+    set(CH572_CHIP_DEFINE "CH58x" CACHE INTERNAL "芯片宏")
+    set(CH572_FAMILY_DEFINE "CH5xx" CACHE INTERNAL "系列宏")
+    set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏")
+    if(CHIP_IS_CH585)
+        set(CH572_MCU_PACKAGE 5 CACHE INTERNAL "MCU_PACKAGE (CH585: RAM 128K)")
+    else()
+        set(CH572_MCU_PACKAGE 4 CACHE INTERNAL "MCU_PACKAGE (CH584: RAM 96K)")
+    endif()
+    set(CH572_MARCH "rv32imac" CACHE STRING "RISC-V 架构扩展")
+    set(CH572_MABI  "ilp32"   CACHE STRING "RISC-V ABI")
 elseif(CHIP_SDK_RESOLVED STREQUAL "CH32V003")
     # CH32V003 是 RV32EC（压缩指令 + 16 寄存器），ABI 用 ilp32e
     set(CH572_MCU_PACKAGE 1  CACHE INTERNAL "MCU_PACKAGE (CH32V003 固定 1)")
@@ -192,6 +213,34 @@ elseif(CHIP_SDK_RESOLVED STREQUAL "CH32V003")
     set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏")
     set(CH572_MARCH "rv32ec" CACHE STRING "RISC-V 架构扩展")
     set(CH572_MABI  "ilp32e" CACHE STRING "RISC-V ABI")
+elseif(CHIP_SDK_RESOLVED STREQUAL "CH32X035")
+    # CH32X035 / X033：62K Flash + 20K RAM，rv32imac（V4C）
+    set(CH572_MCU_PACKAGE 1  CACHE INTERNAL "MCU_PACKAGE (CH32X035 固定 1)")
+    set(CH572_MCU_LD      4  CACHE INTERNAL "TARGET_MCU_LD")
+    set(CH572_CHIP_DEFINE "CH32X03x" CACHE INTERNAL "芯片宏")
+    set(CH572_FAMILY_DEFINE "" CACHE INTERNAL "系列宏（CH32 系列无）")
+    set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏")
+    set(CH572_MARCH "rv32imac" CACHE STRING "RISC-V 架构扩展")
+    set(CH572_MABI  "ilp32"   CACHE STRING "RISC-V ABI")
+elseif(CHIP_SDK_RESOLVED STREQUAL "CH32L103")
+    # CH32L103：64K Flash + 20K RAM，rv32imac（V4C）
+    set(CH572_MCU_PACKAGE 1  CACHE INTERNAL "MCU_PACKAGE (CH32L103 固定 1)")
+    set(CH572_MCU_LD      13 CACHE INTERNAL "TARGET_MCU_LD")
+    set(CH572_CHIP_DEFINE "CH32L103" CACHE INTERNAL "芯片宏")
+    set(CH572_FAMILY_DEFINE "" CACHE INTERNAL "系列宏（CH32 系列无）")
+    set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏")
+    set(CH572_MARCH "rv32imac" CACHE STRING "RISC-V 架构扩展")
+    set(CH572_MABI  "ilp32"   CACHE STRING "RISC-V ABI")
+elseif(CHIP_IS_CH32V20X)
+    # CH32V203：32/64/128K Flash + 10/20/64K RAM（V4B）
+    # 统一按 64K Flash + 20K RAM 链接（32K 型号需在 funconfig 中裁剪）
+    set(CH572_MCU_PACKAGE 1  CACHE INTERNAL "MCU_PACKAGE (V20x 固定 1)")
+    set(CH572_MCU_LD      2  CACHE INTERNAL "TARGET_MCU_LD")
+    set(CH572_CHIP_DEFINE "CH32V20x" CACHE INTERNAL "芯片宏")
+    set(CH572_FAMILY_DEFINE "" CACHE INTERNAL "系列宏（CH32 系列无）")
+    set(CH572_VARIANT_DEFINE "" CACHE INTERNAL "封装变体宏")
+    set(CH572_MARCH "rv32imac" CACHE STRING "RISC-V 架构扩展")
+    set(CH572_MABI  "ilp32"   CACHE STRING "RISC-V ABI")
 else()
     message(FATAL_ERROR "未知芯片：${CHIP_SDK_RESOLVED}")
 endif()
@@ -358,6 +407,10 @@ function(ch572_add_executable TARGET)
     # BLE 支持
     set(_libs ${ARG_EXTRA_LIBS})
     if(ARG_BLE)
+        if(NOT CHIP_HAS_BLE)
+            message(FATAL_ERROR "芯片 ${CHIP_SDK_RESOLVED} 不支持 BLE（BLE 仅 CH57x / CH58x / CH59x）")
+        endif()
+
         # 官方 BLE 库用 GCC 13+ 编译，需要这些扩展：
         #   zicsr/zifencei       - CSR 访问和 fence.i
         #   zmmul/zba/zbb/zbc/zbs - 库使用的扩展
@@ -375,6 +428,11 @@ function(ch572_add_executable TARGET)
         # BLE 库文件名按芯片选择
         if(CHIP_SDK_RESOLVED STREQUAL "CH572")
             list(APPEND _libs "${CH572_BLE_DIR}/lib/libCH572BLE_PERI.a")
+        elseif(CHIP_IS_CH58X)
+            list(APPEND _libs "${CH572_BLE_DIR}/lib/libCH58xBLE.a")
+            # CH58x 的 SNV 需要 Data-Flash(EEPROM) 访问，由官方 ROM 库提供
+            # FLASH_EEPROM_CMD 等函数（libISP585.a）。
+            list(APPEND _libs "${CH572_BLE_DIR}/lib/libISP585.a")
         else()
             list(APPEND _libs "${CH572_BLE_DIR}/lib/libCH59xBLE.a")
             # CH59x 的 SNV 需要 EEPROM(Data-Flash) 访问，由官方 ROM 库提供
@@ -385,6 +443,9 @@ function(ch572_add_executable TARGET)
 
     # USB 支持（fsusb 全速 USB 设备驱动）
     if(ARG_USB)
+        if(NOT CHIP_HAS_USB)
+            message(FATAL_ERROR "芯片 ${CHIP_SDK_RESOLVED} 不支持 USB（fsusb）")
+        endif()
         list(APPEND _sources "${CH572_EXTRALIB_DIR}/fsusb.c")
         # fsusb.c 需要 usb_config.h / usb_defines.h，已在 extralibs 路径中
     endif()
@@ -555,7 +616,9 @@ function(ch572_add_executable TARGET)
 
     # libgcc：CH32V003 用 rv32ec/ilp32e，标准工具链 libgcc 不适用，
     # 需使用 SDK 自带的专用 libgcc.a（sdk/CH32V003_DEV/lib/）。
-    if(CHIP_SDK_RESOLVED STREQUAL "CH32V003")
+    # CH32V20x 使用 rv32imac/ilp32，但 ch32fun 上游同样提供了配套 libgcc.a，
+    # 这里统一按「芯片目录自带 lib/ 时优先使用」处理。
+    if(EXISTS "${SDK_CHIP_DIR}/lib/libgcc.a")
         target_link_options(${TARGET} PRIVATE
             -L"${SDK_CHIP_DIR}/lib"
         )

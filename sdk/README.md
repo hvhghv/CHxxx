@@ -1,6 +1,7 @@
-# CH5xx / CH32V003 多芯片 SDK
+# CH5xx / CH32 多芯片 SDK
 
-支持 CH572 / CH592 / CH591 / CH32V003 的轻量级 GCC SDK，共享公共代码，芯片差异隔离。
+支持 CH572 / CH585 / CH584 / CH592 / CH591 / CH32V003 / CH32X035 / CH32L103 /
+CH32V203 的轻量级 GCC SDK，共享公共代码，芯片差异隔离。
 
 ---
 
@@ -41,17 +42,20 @@ sdk/
         └── Startup_CH592_FreeRTOS.S
 ```
 
-> CH32V003 专属目录 `CH32V003_DEV/`（`core/ch32v003hw.h` + `lib/libgcc.a`）结构类似，
-> 无 `ble/` / `freertos/` 子目录（V003 无 BLE/USB/FreeRTOS）。
+> `CH585_DEV/`（CH585/CH584）结构与 `CH592_DEV/` 类似，但使用
+> `libCH58xBLE.a` + `libISP585.a`、`CH58x_*.h` 头文件，BLE 5.4（无 USBHS 的 CH584 去掉了 USBHS/SPI1）。
+>
+> CH32 专属目录 `CH32V003_DEV/`、`CH32X035_DEV/`、`CH32L103_DEV/`、`CH32V20x_DEV/`
+> 只有 `core/`（寄存器头 + 链接脚本），无 `ble/` / `freertos/` 子目录。
 
 ---
 
 ## 芯片选择
 
-修改项目根的 `sdk_config.cmake`：
+修改项目根的 `default_target.txt`（推荐）或 `sdk_config.cmake`：
 
 ```cmake
-set(CHIP_SDK "CH572")    # 可选：CH572 / CH592 / CH591 / CH32V003
+set(CHIP_SDK "CH572")    # 见下方芯片差异对照表
 ```
 
 或命令行覆盖：
@@ -64,20 +68,42 @@ cmake -B build -DCHIP_SDK=CH592 ...
 
 ## 芯片差异对照
 
-| 项目 | CH572 | CH591 | CH592 | CH32V003 |
-|---|---|---|---|---|
-| 内核 | RV32IMAC (V3C) | RV32IMAC (V4C) | RV32IMAC (V4C) | **RV32EC (V2A)** |
-| SRAM | 12 KB | **26 KB** | **26 KB** | 2 KB |
-| Flash | 240 KB | 192 KB | 448 KB | 16 KB |
-| EEPROM | — | 32 KB | 32 KB | — |
-| BLE | 5.0 | 5.4 | 5.4 | — |
-| USB | Device | Host/Device | Host/Device | — |
-| UART | 1 | 4 | 4 | 1 |
-| GPIO | 12 | 24 | 24 | 18 |
-| `TARGET_MCU_LD` | 10 | 9 | 9 | 0 |
-| `MCU_PACKAGE` | 2 | 1 | 2 | 1 |
-| 架构 | `rv32imac/ilp32` | `rv32imac/ilp32` | `rv32imac/ilp32` | `rv32ec/ilp32e` |
-| BLE 库 | `libCH572BLE_PERI.a` | `libCH59xBLE.a` | `libCH59xBLE.a` | — |
+> 📖 **完整的按型号（含封装后缀）参数对照见 [`docs/CHIP_COMPARISON.md`](../docs/CHIP_COMPARISON.md)**，
+> 包含内核/存储、无线/USB、通信外设、定时器、模拟外设、人机接口、电源、封装、
+> SDK 构建参数以及按需求的选型速查表。
+
+### 系列级总览
+
+| 系列 | 型号（后缀） | 内核 | RAM | Flash | BLE | USB | 定位 |
+|---|---|---|---|---|---|---|---|
+| **CH57x** | CH572D / Q / R | RV32IMBC (V3C) | 12 KB | 240 KB | 5.0 | FS | 极低成本 BLE 外设 |
+| **CH59x** | CH592X / F / A / D | V4C | 26 KB | 448 KB | 5.4 | FS 主/从 | BLE + USB 主力，支持 FreeRTOS/LWIP |
+| **CH59x** | CH591F / D / R | V4C | 26 KB | 192 KB | 5.4 | FS 主/从 | 同 CH592，Flash 减半需裁剪 |
+| **CH58x** | CH585M / F / C / D | V4C | **128 KB** | 448 KB | 5.4 | FS + **HS** | 大 RAM，BLE + USB 复合应用 |
+| **CH58x** | CH584M / X / F | V4C | **96 KB** | 448 / 480 KB | 5.4 | FS | 同 CH585，去掉 USBHS + SPI1 |
+| **CH32** | CH32V003F4P6 / F4U6 / A4M6 / J4M6 | **RV32EC (V2A)** | 2 KB | 16 KB | — | — | 超低成本通用 MCU |
+| **CH32** | CH32X035R8T6 / C8T6 / G8U6 / G8R6 / F8U6 / F7P6 / D8U6 | V4C | 20 KB | 62 KB | — | FS + PDUSB | USB PD / Type-C 快充 |
+| **CH32** | CH32L103C8T6 / K8U6 / K8U7 / G8R6 / F8U6 / F8P6 | V4C | 20 KB | 64 KB | — | FS + PDUSB | 低功耗 + USB PD + CAN |
+| **CH32** | CH32V203F6P6 … RBT6 | V4B | 10/20/64 KB | 32/64/128 KB | — | 双 FS | 高性能双 USB + CAN |
+
+### 型号 → SDK 参数速查
+
+| 型号 | `CHIP_SDK` | 芯片宏 | `TARGET_MCU_LD` | `MCU_PACKAGE` | 架构 |
+|---|---|---|---|---|---|
+| CH572D / Q / R | `CH572` | `CH57x` | 10 | 2 | `rv32imac` / `ilp32` |
+| CH592X / F / A / D | `CH592X` … `CH592D` | `CH59x` | 9 | 2 | `rv32imac` / `ilp32` |
+| CH591F / D / R | `CH591F` … `CH591R` | `CH59x` | 9 | 1 | `rv32imac` / `ilp32` |
+| CH585M / F / C / D | `CH585M` … `CH585D` | `CH58x` | 12 | 5 | `rv32imac` / `ilp32` |
+| CH584M / X / F | `CH584M` … `CH584F` | `CH58x` | 12 | 4 | `rv32imac` / `ilp32` |
+| CH32V003 全系 | `CH32V003` | `CH32V003` | 0 | 1 | **`rv32ec` / `ilp32e`** |
+| CH32X035 全系 | `CH32X035` | `CH32X03x` | 4 | 1 | `rv32imac` / `ilp32` |
+| CH32L103 全系 | `CH32L103` | `CH32L103` | 13 | 1 | `rv32imac` / `ilp32` |
+| CH32V203 全系 | `CH32V203` | `CH32V20x` | 2 | 1 | `rv32imac` / `ilp32` |
+
+> 兼容别名：`CH592` ≡ `CH592X`，`CH591` ≡ `CH591F`，`CH585` ≡ `CH585F`，`CH584` ≡ `CH584F`。
+>
+> CH32X035 / CH32L103 / CH32V203 的多个封装变体在 SDK 中合并为一个系列编译，
+> 链接脚本按该系列的最大 Flash/RAM 配置；小容量型号需在 `funconfig.h` 中自行裁剪。
 
 ---
 
@@ -114,12 +140,37 @@ cmake -B build -DCHIP_SDK=CH592 ...
 ## 添加新芯片
 
 1. 创建 `sdk/CHxxx_DEV/`，复制 `core/`（链接脚本 + 寄存器头）和 `ble/`（BLE 库 + HAL）
-2. 在 `sdk_config.cmake` 加入新选项
+2. 在 `sdk_config.cmake` 加入新选项（含 `CHIP_IS_XXX` / `CHIP_HAS_BLE` / `CHIP_HAS_USB` 判定）
 3. 在 `sdk/CMakeLists.txt` 加入目录映射
 4. 在 `sdk/common/cmake/sdk.cmake` 加入 `TARGET_MCU_LD` / `MCU_PACKAGE` / 架构分支
-5. 在 `ch32fun.ld` 确认该芯片的 RAM/Flash 配置存在
+5. 在 `ch32fun.ld` 确认该芯片的 RAM/Flash 配置存在（必要时新增 `TARGET_MCU_LD` 分支）
 6. 若芯片架构特殊（如 CH32V003 的 `rv32ec`），在 `sdk.cmake` 中设置对应 `MARCH`/`MABI`，
    并按需提供专用 `libgcc.a`
+
+---
+
+## CH58x（CH585 / CH584）说明
+
+| 项目 | 说明 |
+|---|---|
+| 芯片宏 | `-DCH58x=1`（同时定义 `-DCH5xx`） |
+| `MCU_PACKAGE` | 5 = CH585（128K RAM）/ 4 = CH584（96K RAM） |
+| BLE 库 | `libCH58xBLE.a` + `libISP585.a`（SNV 需要 EEPROM） |
+| HAL 入口 | `CH58x_BLEInit()` / `HAL_Init()`（与 CH59x 接口一致） |
+| 时钟 | 默认 `CLK_SOURCE_PLL_60MHz`；CH58x 不支持精确 60MHz 时会自动切到 62.4MHz |
+| 特殊差异 | 32K 使能位在 `R8_CK32K_CONFIG`（CH59x 为 `R8_LSI_CONFIG`） |
+
+---
+
+## CH32 系列（X035 / L103 / V203）说明
+
+| 项目 | 说明 |
+|---|---|
+| 芯片宏 | `-DCH32X03x` / `-DCH32L103` / `-DCH32V20x` |
+| 架构 | 全部 `rv32imac/ilp32`（与 CH5xx 相同） |
+| BLE | 不支持（`ch572_add_executable(... BLE)` 会报错） |
+| USB | `fsusb` 已支持 X035 / L103 / V203 的 USB FS |
+| 示例固件 | `main/blink_ch32/` |
 
 ---
 

@@ -315,6 +315,8 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			else
 				off = s_int(line, off, sizeof(line), g_pin_cfg[i].arg1);
 			off = s_cat(line, off, sizeof(line), " ");
+			off = s_int(line, off, sizeof(line), g_pin_cfg[i].arg2);   /* 第 6 字段：arg2 */
+			off = s_cat(line, off, sizeof(line), " ");
 			off = s_int(line, off, sizeof(line), g_pin_cfg[i].flags & 0x03);   /* bind */
 			off = s_cat(line, off, sizeof(line), "\r\n");
 			tcp_write(pcb, line, (u16_t)off, TCP_WRITE_FLAG_COPY);
@@ -375,13 +377,20 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			g_pin_cfg[pin].param1 = (uint8_t)inst;
 			g_pin_cfg[pin].param2 = (uint8_t)query_int(req, "p2", 0);
 		} else if (func == PIN_FUNC_SPI) {
-			/* SPI 引脚：param2=角色；CS/INT 的 param1=设备号（从 func 名解析） */
+			/* SPI 引脚：param2=角色；CS 的 param1=设备号；INT 的 param1=共享线 ID
+			 * INT 额外用 arg2 记录绑定的设备号（支持多设备共享一条 INT 线） */
 			g_pin_cfg[pin].param2 = (uint8_t)inst;
-			if (inst == PIN_SPI_CS || inst == PIN_SPI_INT) {
-				/* func 名尾部的数字即设备号：SPI0_CSn / SPI0_INTn */
+			if (inst == PIN_SPI_CS) {
+				/* func 名尾部的数字即设备号：SPI0_CSn */
 				const char *r = fs + 5;
-				const char *num = (inst == PIN_SPI_CS) ? r + 2 : r + 3;
-				g_pin_cfg[pin].param1 = (uint8_t)(*num - '0');
+				g_pin_cfg[pin].param1 = (uint8_t)(r[2] - '0');
+			} else if (inst == PIN_SPI_INT) {
+				/* SPI0_INTn：n = 共享中断线 ID（默认与设备号相同） */
+				const char *r = fs + 5;
+				int line = r[3] - '0';
+				g_pin_cfg[pin].param1 = (uint8_t)line;
+				/* arg2 = 绑定的设备号（默认 = 线 ID，即独占模式） */
+				g_pin_cfg[pin].arg2 = (uint8_t)query_int(req, "dev", line);
 			} else {
 				g_pin_cfg[pin].param1 = 0;
 			}
@@ -579,7 +588,9 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 
 	/* SPI 状态与设备：GET /api/spi
 	 * 输出：role=master|slave\r\n
-	 *       dev=<n> cs=<引脚名|-> int=<引脚名|->\r\n（每设备一行） */
+	 *       dev=<n> cs=<引脚名|-> int=<引脚名|->\r\n（每设备一行）
+	 *       line=<n> devs=<k> dev=<d0>,<d1>,...\r\n（每条 INT 线一行，主机模式）
+	 * 共享 INT 时 line 的 devs>1 */
 	if (strncmp(req, "GET /api/spi", 12) == 0) {
 		uint32_t off = 0;
 		CAT("role=");
@@ -595,6 +606,24 @@ static void http_handle(struct tcp_pcb *pcb, const char *req)
 			CAT(" int=");
 			CAT(ip >= 0 ? pinmux_pin_name(ip) : "-");
 			CAT("\r\n");
+		}
+		/* 主机模式：输出每条 INT 线绑定的设备（共享中断信息） */
+		if (!spibus_is_slave()) {
+			for (int line = 0; line < GW_SPI_MAX_DEV; line++) {
+				int n = spibus_int_line_dev_count(line);
+				if (n <= 0) continue;
+				CAT("line=");
+				CATI(line);
+				CAT(" devs=");
+				CATI(n);
+				CAT(" dev=");
+				for (int k = 0; k < n; k++) {
+					int d = spibus_int_line_dev(line, k);
+					if (k) CAT(",");
+					CATI(d);
+				}
+				CAT("\r\n");
+			}
 		}
 		http_send(pcb, http_200, body);
 		return;

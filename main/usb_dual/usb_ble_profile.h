@@ -15,10 +15,12 @@
 /* 按芯片选择官方 BLE 库头文件（与 sdk/common/cmake/sdk.cmake 的芯片宏一致） */
 #if defined(CH57x)
 #include "CH572BLEPeri_LIB.h"
+#elif defined(CH58x)
+#include "CH58xBLE_LIB.h"
 #elif defined(CH59x)
 #include "CH59xBLE_LIB.h"
 #else
-#error "未定义芯片宏（CH57x / CH59x）"
+#error "未定义芯片宏（CH57x / CH58x / CH59x）"
 #endif
 
 /* 服务与特征 UUID */

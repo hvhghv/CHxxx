@@ -460,7 +460,7 @@ static void cmd_spi(const char *p)
 	} else
 #endif
 	if (strncmp(p, "dev", 3) == 0) {
-		/* spi dev：列出设备（CS/INT 引脚）—— 仅 CH592（CH591 用 HTTP API） */
+		/* spi dev：列出设备（CS/INT 引脚）+ INT 线共享关系 —— 仅 CH592（CH591 用 HTTP API） */
 #if GW_SPI_MULTIDEV
 		cdc_puts(&tx_a, "SPI ");
 		cdc_puts(&tx_a, spibus_is_slave() ? "slave" : "master");
@@ -477,6 +477,23 @@ static void cmd_spi(const char *p)
 			cdc_puts(&tx_a, " int=");
 			if (ip >= 0) cdc_puts(&tx_a, pinmux_pin_name(ip)); else cdc_puts(&tx_a, "-");
 			cdc_puts(&tx_a, "\r\n");
+		}
+		/* 主机模式：输出 INT 线共享关系 */
+		if (!spibus_is_slave()) {
+			for (int line = 0; line < GW_SPI_MAX_DEV; line++) {
+				int n = spibus_int_line_dev_count(line);
+				if (n <= 0) continue;
+				cdc_puts(&tx_a, "  line");
+				cdc_put_i32(&tx_a, line);
+				cdc_puts(&tx_a, " devs=");
+				cdc_put_i32(&tx_a, n);
+				cdc_puts(&tx_a, " dev=");
+				for (int k = 0; k < n; k++) {
+					if (k) cdc_puts(&tx_a, ",");
+					cdc_put_i32(&tx_a, spibus_int_line_dev(line, k));
+				}
+				cdc_puts(&tx_a, "\r\n");
+			}
 		}
 #else
 		cdc_puts(&tx_a, "SPI multi-dev disabled\r\n");

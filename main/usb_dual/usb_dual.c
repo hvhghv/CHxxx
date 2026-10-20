@@ -28,11 +28,14 @@
 #if defined(CH57x)
 void CH57x_BLEInit(void);
 #define BLE_LIB_INIT()   CH57x_BLEInit()
+#elif defined(CH58x)
+void CH58x_BLEInit(void);
+#define BLE_LIB_INIT()   CH58x_BLEInit()
 #elif defined(CH59x)
 void CH59x_BLEInit(void);
 #define BLE_LIB_INIT()   CH59x_BLEInit()
 #else
-#error "未定义芯片宏（CH57x / CH59x）"
+#error "未定义芯片宏（CH57x / CH58x / CH59x）"
 #endif
 void HAL_Init(void);
 

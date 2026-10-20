@@ -7,6 +7,10 @@
 if(CHIP_SDK_RESOLVED STREQUAL "CH32V003")
     # CH32V003：无 BLE / USB
     add_subdirectory(blink_v003)
+elseif(CHIP_IS_CH32RV)
+    # 其他 CH32 系列（CH32X035 / CH32L103 / CH32V203）：
+    # 无 BLE、有 USB。目前只有 LED 闪烁示例可用。
+    add_subdirectory(blink_ch32)
 else()
     # CH5xx：BLE + USB
     add_subdirectory(usb_dual)

@@ -6,13 +6,24 @@
  *   SCK/MOSI/MISO  : param2 = PIN_SPI_SCK/MOSI/MISO，param1 忽略
  *   CS（主机）      : param2 = PIN_SPI_CS，param1 = 设备号（软件 GPIO 输出）
  *   CS（从机）      : param2 = PIN_SPI_CS，param1 忽略（硬件 SCS 输入）
- *   INT            : param2 = PIN_SPI_INT，param1 = 设备号
+ *   INT            : param2 = PIN_SPI_INT
+ *                    param1 = 共享中断线 ID（0..GW_SPI_MAX_DEV-1）
+ *                    arg2   = 该 INT 线绑定的设备号
  *                    flags bit0 = 有效电平（0=低有效，1=高有效）
  *                    arg1 = 触发方式（pin_irq_t）
  *   总线角色（主机/从机）由 SCK 引脚的 flags bit1 决定（0=主机，1=从机）
  *
  * 主机模式：INT 为输入（对端驱动），检测到有效电平 → 拉低 CS → 传输 → 释放 CS
  * 从机模式：INT 为输出（本机驱动），有数据时拉高通知主机；CS 由硬件 SCS 自动处理
+ *
+ * ★ 共享中断线（主机模式，省 IO）：
+ *   多个从机设备可共用一条 INT 线，只需 1 个 GPIO。配置方式：
+ *     - 独占：设备 0 用 INT0（param1=0, arg2=0），设备 1 用 INT1（param1=1, arg2=1）
+ *     - 共享：设备 0 和 1 都用 INT0（param1=0, arg2=0 / param1=0, arg2=1）
+ *   主机检测到 INT 有效后，会遍历该线上所有设备，逐个 CS 读取试探：
+ *     有数据的设备返回有效长度前缀 → 读满 PAYLOAD → 回调
+ *     无数据的设备读回 0xFFFF（plen 超限）→ 跳过
+ *   代价：共享时一次中断可能产生多次 SPI 事务（无数据的设备也要试一次）。
  *
  * 长度前缀协议（双向对称，仅存在于 SPI 传输层，不进入 framelink）：
  *   [LEN_H][LEN_L][PAYLOAD ...]   LEN = 负载字节数（大端，最大 65535）
@@ -48,9 +59,16 @@ int spibus_dev_count(void);
  *   int_pin : INT 引脚紧凑编号（-1 表示无） */
 int spibus_dev_info(int dev, int *cs_pin, int *int_pin);
 
-/* 主机模式：轮询各设备 INT 线，有中断则自动 CS + 读取长度前缀 + 读满整帧
+/* 查询某条 INT 线上绑定的设备数（共享中断时 >1；0=该线未使用） */
+int spibus_int_line_dev_count(int line);
+
+/* 查询某条 INT 线上第 idx 个设备的设备号（-1=无） */
+int spibus_int_line_dev(int line, int idx);
+
+/* 主机模式：轮询各 INT 线，有中断则自动 CS + 读取长度前缀 + 读满整帧
  *   协议：[LEN_H][LEN_L][PAYLOAD]，自动解析后回调 on_data(dev, payload, len)
  *   回调收到的只有 PAYLOAD，不含长度前缀
+ *   ★ 支持共享 INT 线：一次中断会遍历该线上所有设备，逐个试探
  * 返回处理的设备数 */
 typedef void (*spibus_rx_cb_t)(int dev, const uint8_t *data, uint32_t len);
 int spibus_master_poll(spibus_rx_cb_t on_data);

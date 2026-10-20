@@ -110,6 +110,26 @@ MEMORY
 	#else
 		#error "Unknown MCU package"
 	#endif
+#elif TARGET_MCU_LD == 12
+	/* CH585/CH584 */
+	#if MCU_PACKAGE == 4
+		FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 448K
+		RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 96K
+	#elif MCU_PACKAGE == 5
+		FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 448K
+		RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 128K
+	#else
+		#error "Unknown MCU package"
+	#endif
+#elif TARGET_MCU_LD == 13
+	/* CH32L103 */
+	#if MCU_PACKAGE == 1
+		FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 64K
+		RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 20K
+	#else
+		#error "Unknown MCU package"
+	#endif
+
 #elif TARGET_MCU_LD == 11
 	/* CH32H41x */
 	#if MCU_PACKAGE == 1 || MCU_PACKAGE == 3
@@ -149,7 +169,7 @@ SECTIONS
 			_einit = .;
 		} >FLASH AT>FLASH
 
-#if TARGET_MCU_LD == 8 || TARGET_MCU_LD == 9 || TARGET_MCU_LD == 10
+#if TARGET_MCU_LD == 8 || TARGET_MCU_LD == 9 || TARGET_MCU_LD == 10 || TARGET_MCU_LD == 12
 		.highcodelalign : 
 		{       
 			. = ALIGN(4);
