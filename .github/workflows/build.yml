@@ -39,7 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.include) }}
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
     name: ${{ matrix.chip }} / ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v4
