@@ -15,6 +15,7 @@
 #include "hal_gpio.h"
 #include "hal_uart.h"
 #include "hal_log.h"
+#include "hal_flash.h"
 #include "hal_ble.h"
 #include "hal_usb.h"
 #include "hal_usb_cdc.h"
@@ -24,7 +25,6 @@
 /* #include "hal_spi.h"        */
 /* #include "hal_pwm.h"        */
 /* #include "hal_adc.h"        */
-/* #include "hal_flash.h"      */
 /* #include "hal_usb_hid.h"    */
 /* #include "hal_usb_msc.h"    */
 /* #include "hal_bt_classic.h" */

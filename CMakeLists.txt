@@ -57,6 +57,8 @@ if(HAL_BUILD)
     # blink 验证工具链 + GPIO + 时基；uart_demo 验证 UART 驱动。
     add_subdirectory(main/blink)
     add_subdirectory(main/uart_demo)
+    # flash_demo 验证 Flash / ROM 读写（UID/MAC/擦写读回环）
+    add_subdirectory(main/flash_demo)
 
     # ---- 需要 BLE + USB（ble_usb 是 BLE+USB 共存示例） ----
     # ★ CH572 只有 12KB RAM，完整 BLE 栈装不下，暂不支持。

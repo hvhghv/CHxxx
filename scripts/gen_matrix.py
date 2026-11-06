@@ -62,7 +62,7 @@ def read_chip(name: str) -> dict:
 
 def targets_for(chip: dict) -> list:
     """按 CMakeLists.txt 的条件推导目标列表。"""
-    t = ["blink", "uart_demo"]
+    t = ["blink", "uart_demo", "flash_demo"]
 
     if chip.get("ble") and chip.get("usb") and chip["name"] != "ch572":
         t.append("ble_usb")
