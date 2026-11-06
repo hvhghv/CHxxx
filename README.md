@@ -34,18 +34,51 @@ CH32V003 / CH32X035 / CH32L103 / CH32V203 开发项目模板。
 │   ├── gateway/            # 多功能网关（CH592/CH591）
 │   ├── blink_v003/         # LED 闪烁（CH32V003 示例）
 │   └── blink_ch32/         # LED 闪烁（CH32X035/L103/V203 示例）
-├── sdk/                    # SDK 集合
-│   ├── common/             # 共享：工具链、ch32fun、USB 栈、构建逻辑
-│   ├── CH572_DEV/          # CH572 专属（BLE 库）
-│   ├── CH585_DEV/          # CH585 / CH584 专属（BLE 5.4 库 + HAL）
-│   ├── CH592_DEV/          # CH592 / CH591 专属（BLE 库 + FreeRTOS + LWIP）
-│   ├── CH32V003_DEV/       # CH32V003 专属（无 BLE/USB）
-│   ├── CH32X035_DEV/       # CH32X035 专属（USB FS + PDUSB，无 BLE）
-│   ├── CH32L103_DEV/       # CH32L103 专属（USB FS + PDUSB，无 BLE）
-│   └── CH32V20x_DEV/       # CH32V203 专属（双 USB）
-├── tool/
-│   └── wchisp/             # USB 烧录工具（wchisp.exe）
-└── tmp/                    # 参考源码（ch32fun / CH572EVT 副本，已 gitignore）
+├── sdk/                    # SDK（所有非 main 源码）
+│   ├── hal/                # 通用 HAL 层（与芯片无关）
+│   │   ├── include/        #   hal_core.h / hal_usb.h / hal_ble.h ...
+│   │   └── src/            #   hal_log.c / hal_usb_cdc_common.c ...
+│   ├── port/               # 芯片移植层
+│   │   ├── ch59x/          #   hal_*_ch59x.c
+│   │   └── ch32x035/       #   hal_*_ch32x035.c
+│   ├── vendor/             # 官方 SDK 原样拷贝
+│   │   ├── ch59x/          #   Startup / RVMSIS / StdPeriphDriver / BLE
+│   │   ├── ch572/          #   CH572 官方库
+│   │   ├── ch585/          #   CH585 官方库
+│   │   ├── ch32x035/       #   CH32X035 官方库
+│   │   ├── ch32l103/       #   CH32L103 官方库
+│   │   └── ch32v20x/       #   CH32V203 官方库
+│   ├── cmake/              # 构建脚本（toolchain / hal.cmake / chip_*.cmake）
+│   └── common/prebuilt/    # RISC-V 工具链（xpack-riscv-none-elf-gcc）
+├── tools/                  # 所有工具（烧录 / 测试脚本）
+│   ├── wchisp/             #   USB 烧录工具（wchisp.exe）
+│   ├── ble_scan.py         #   BLE 扫描
+│   ├── ble_gatt_test.py    #   BLE GATT 收发测试
+│   └── ble_trace_gen.py    #   BLE trace 生成
+└── tmp/                    # 参考源码 + 旧架构备份（已 gitignore）
+    ├── legacy_sdk/         #   旧架构（sdk/*_DEV + ch32fun）
+    └── junk_bin/           #   调试残留
+```
+
+### 支持的芯片
+
+| `-Chip` 参数 | 芯片 | 特性 |
+|---|---|---|
+| `ch59x` | CH591 / CH592 | BLE 5.4 + USB FS |
+| `ch572` | CH572 | BLE 5.0，12KB RAM |
+| `ch585` | CH585 / CH584 | BLE 5.4 + USBHS，128KB RAM |
+| `ch32x035` | CH32X035 | USB FS + PDUSB，无 BLE |
+| `ch32l103` | CH32L103 | USB FS + PDUSB，无 BLE |
+| `ch32v20x` | CH32V203 | 双 USB，无 BLE |
+
+### 构建
+
+```powershell
+.\build.ps1 -Chip ch59x              # 编译全部目标
+.\build.ps1 -Chip ch32x035           # 切换芯片
+.\build.ps1 -Target blink            # 只编译一个
+.\build.ps1 -Flash blink             # 编译并烧录
+.\build.ps1 -List                    # 列出可用目标
 ```
 
 > 每个 `main/<项目>/build_targets.txt` 声明该项目支持/要构建的芯片，
@@ -76,7 +109,7 @@ CH32V003 / CH32X035 / CH32L103 / CH32V203 开发项目模板。
 |---|---|
 | **CMake** ≥ 3.20 | 构建系统 |
 | **Ninja** | 构建后端（也可用 make） |
-| **RISC-V GCC** | **已内置**在 `sdk/common/prebuilt/`（xPack 15.2.0） |
+| **RISC-V GCC** | **已内置**在 `sdk/prebuilt/`（xPack 15.2.0） |
 
 ---
 

@@ -1,0 +1,68 @@
+; ============================================================================
+; DualCDC.inf —— 双 CDC 复合设备驱动安装文件
+;
+; 用途：把 VID_1A86&PID_FE09 的两个 CDC 接口分别绑定到 usbser.sys，
+;       让 Windows 出现两个 COM 口。
+;
+; 安装方法（管理员 PowerShell）：
+;   pnputil /add-driver DualCDC.inf /install
+;
+; 卸载：
+;   pnputil /delete-driver oemXX.inf /uninstall
+;   （oemXX 用 pnputil /enum-drivers 查）
+;
+; 注意：这是测试用 inf，未签名。Windows 10/11 64 位需要禁用驱动签名
+;       或使用测试签名模式才能安装。
+; ============================================================================
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = Ports
+ClassGuid   = {4D36E978-E325-11CE-BFC1-08002BE10318}
+Provider    = %ProviderName%
+CatalogFile = DualCDC.cat
+DriverVer   = 11/06/2026,1.0.0.0
+
+[Manufacturer]
+%ProviderName% = DualCDC,NTamd64,NTarm64
+
+; ---------------------------------------------------------------------------
+; 复合设备本身（USB Composite Device）
+; ---------------------------------------------------------------------------
+[DualCDC.NTamd64]
+%DeviceName% = DualCDC_Install, USB\VID_1A86&PID_FE09
+
+[DualCDC.NTarm64]
+%DeviceName% = DualCDC_Install, USB\VID_1A86&PID_FE09
+
+[DualCDC_Install]
+Include = usbser.inf
+Needs   = USB\Class_02&SubClass_02
+AddService = usbser, 0x00000002, usbser_AddService
+
+[usbser_AddService]
+DisplayName = %ServiceName%
+ServiceType = 1
+StartType   = 3
+ErrorControl= 1
+ServiceBinary = %12%\usbser.sys
+
+; ---------------------------------------------------------------------------
+; 接口 0 —— 第一个 CDC（MI_00 / MI_02）
+; ---------------------------------------------------------------------------
+[DualCDC.NTamd64.Interfaces]
+AddInterface = %INTERFACE_GUID%, %INTERFACE_NAME%, CDC_Interface_0
+
+[DualCDC.NTarm64.Interfaces]
+AddInterface = %INTERFACE_GUID%, %INTERFACE_NAME%, CDC_Interface_0
+
+[CDC_Interface_0]
+AddService = usbser, 0x00000002, usbser_AddService
+
+; ---------------------------------------------------------------------------
+[Strings]
+ProviderName    = "CHxxx"
+DeviceName      = "Dual CDC Composite Device"
+ServiceName     = "USB Serial Driver"
+INTERFACE_GUID  = "{2C1B0F21-9A3E-4E7B-8F1C-3D5A6B7C8D9E}"
+INTERFACE_NAME  = "Dual CDC Port"

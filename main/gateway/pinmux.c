@@ -67,9 +67,11 @@ static const uint8_t g_pin_map[PIN_COUNT] = {
 	PM_PB(10), PM_PB(11),          /* PB10/11（USB D-/D+） */
 	PM_PB(22), PM_PB(23),          /* PB22/23 */
 };
-#elif defined(CH591)
+#elif defined(CH591) || defined(CH591F)
 /* CH591F QFN28：20 个 GPIO（据数据手册引脚图）
- *   PA4/5/8/9/10-15 + PB4/7/10-15/22-23 */
+ *   PA4/5/8/9/10-15 + PB4/7/10-15/22-23
+ * 注：CH591F 构建时 SDK 只定义 CH59x（不定义 CH591），
+ *     因此必须同时判断 CH591F，否则会落入 CH592X 分支导致元素数不符。 */
 static const uint8_t g_pin_map[PIN_COUNT] = {
 	4, 5, 8, 9, 10, 11, 12, 13, 14, 15,    /* PA4/5/8/9/10/11/12/13/14/15 */
 	PM_PB(4), PM_PB(7), PM_PB(10), PM_PB(11), PM_PB(12), PM_PB(13), PM_PB(14), PM_PB(15),  /* PB4/7/10-15 */

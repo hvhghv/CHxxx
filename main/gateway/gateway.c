@@ -68,53 +68,59 @@ void sys_nosys_tick(void);
 /* ===========================================================================
  * 环形缓冲（单生产者单消费者）
  * 终端口（A）用大缓冲；转发口（B/C/D）用小缓冲省 RAM。
+ *
+ * 实现说明：所有缓冲共用同一结构体类型（buf 为指针 + size），
+ * 存储区由各自的静态数组提供。这样 rb_push/rb_pop/tx_push/tx_flush
+ * 只有一套实现，且不会触发 -Warray-bounds 警告。
  * =========================================================================== */
 #define RB_SIZE   128   /* 终端口接收缓冲 */
 #define RB_SIZE_F  64   /* 转发口接收缓冲 */
 #define TX_SIZE   256   /* 终端口发送缓冲 */
 #define TX_SIZE_F  96   /* 转发口发送缓冲 */
 
-/* 通用环形缓冲（size = 有效容量，字段布局一致便于统一操作） */
+/* 通用环形缓冲：buf 指向外部存储区，size = 容量 */
 typedef struct {
-	volatile uint8_t  buf[RB_SIZE];
+	uint8_t          *buf;
 	volatile uint32_t head;
 	volatile uint32_t tail;
 	uint32_t          size;
 } ringbuf_t;
 
+/* 通用发送缓冲：buf 指向外部存储区，size = 容量 */
 typedef struct {
-	volatile uint8_t  buf[TX_SIZE];
+	uint8_t          *buf;
 	volatile uint32_t head;
 	volatile uint32_t tail;
 	uint32_t          size;
 } txbuf_t;
 
-/* 转发口缓冲（小容量，复用同一操作函数） */
-typedef struct {
-	volatile uint8_t  buf[RB_SIZE_F];
-	volatile uint32_t head;
-	volatile uint32_t tail;
-	uint32_t          size;
-} ringbuf_f_t;
-
-typedef struct {
-	volatile uint8_t  buf[TX_SIZE_F];
-	volatile uint32_t head;
-	volatile uint32_t tail;
-	uint32_t          size;
-} txbuf_f_t;
-
 /* CDC-A 终端：rb_a/tx_a；CDC-B/C/D 转发：数组 rb_f[]/tx_f[]（索引 = UART 号）
  * 固定映射：UART0→[0](CDC-B), UART1→[1](CDC-C), UART2→[2](CDC-D)
- * 数组方式省去 switch 分支，最省 Flash。 */
-static ringbuf_t   rb_a = { .size = RB_SIZE };
-static txbuf_t     tx_a = { .size = TX_SIZE };
+ * 数组方式省去 switch 分支，最省 Flash。
+ * 注意：初始化列表元素数必须与 GW_FWD_MAX 一致（CH591=2，CH592=3），
+ *       否则会触发 'excess elements in array initializer' 警告。 */
 #define GW_FWD_MAX (GW_CDC_COUNT - 1)   /* 转发口数量：CH591=2, CH592=3 */
-static ringbuf_f_t rb_f[GW_FWD_MAX] = {
-	{ .size = RB_SIZE_F }, { .size = RB_SIZE_F }, { .size = RB_SIZE_F }
+
+/* 存储区（静态分配） */
+static uint8_t rb_a_store[RB_SIZE];
+static uint8_t tx_a_store[TX_SIZE];
+static uint8_t rb_f_store[GW_FWD_MAX][RB_SIZE_F];
+static uint8_t tx_f_store[GW_FWD_MAX][TX_SIZE_F];
+
+/* 缓冲对象（buf 指向上面的存储区） */
+static ringbuf_t   rb_a = { .buf = rb_a_store, .size = RB_SIZE };
+static txbuf_t     tx_a = { .buf = tx_a_store, .size = TX_SIZE };
+static ringbuf_t rb_f[GW_FWD_MAX] = {
+	{ .buf = rb_f_store[0], .size = RB_SIZE_F }, { .buf = rb_f_store[1], .size = RB_SIZE_F }
+#if GW_FWD_MAX >= 3
+	, { .buf = rb_f_store[2], .size = RB_SIZE_F }
+#endif
 };
-static txbuf_f_t   tx_f[GW_FWD_MAX] = {
-	{ .size = TX_SIZE_F }, { .size = TX_SIZE_F }, { .size = TX_SIZE_F }
+static txbuf_t   tx_f[GW_FWD_MAX] = {
+	{ .buf = tx_f_store[0], .size = TX_SIZE_F }, { .buf = tx_f_store[1], .size = TX_SIZE_F }
+#if GW_FWD_MAX >= 3
+	, { .buf = tx_f_store[2], .size = TX_SIZE_F }
+#endif
 };
 
 static void rb_push(void *rbv, const uint8_t *data, uint32_t len)

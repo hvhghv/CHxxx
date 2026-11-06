@@ -28,7 +28,7 @@ extern "C" {
 #    define GW_PIN_COUNT 10
 #  elif defined(CH592D)
 #    define GW_PIN_COUNT 12
-#  elif defined(CH591) || defined(CH592F)
+#  elif defined(CH591) || defined(CH591F) || defined(CH592F)
 #    define GW_PIN_COUNT 20
 #  else
 #    define GW_PIN_COUNT 24

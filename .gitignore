@@ -17,11 +17,16 @@ build*/
 tmp/
 
 # ---------------------------------------------------------------------------
-# 预编译工具链（1.7GB，用 sdk/common/prebuilt/download.ps1 下载）
+# 重构临时备份
 # ---------------------------------------------------------------------------
-sdk/common/prebuilt/xpack-riscv-none-elf-gcc-*/
-sdk/common/prebuilt/*.tar.gz
-sdk/common/prebuilt/*.zip
+.refactor_backup/
+
+# ---------------------------------------------------------------------------
+# 预编译工具链（约 400MB，用 sdk/prebuilt/download.ps1 下载或 CI 自动下载）
+# ---------------------------------------------------------------------------
+sdk/prebuilt/xpack-riscv-none-elf-gcc-*/
+sdk/prebuilt/*.tar.gz
+sdk/prebuilt/*.zip
 
 # ---------------------------------------------------------------------------
 # CMake

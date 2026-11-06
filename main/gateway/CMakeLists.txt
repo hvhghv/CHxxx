@@ -4,35 +4,44 @@
 
 cmake_minimum_required(VERSION 3.20)
 
-if(NOT COMMAND ch572_add_executable)
-    get_filename_component(SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk" ABSOLUTE)
-    include(${SDK_ROOT}/common/cmake/sdk.cmake)
+# ---- 子型号（决定 Flash 裁剪策略）------------------------------------------
+# 新架构按芯片族构建（ch59x = CH591 + CH592），子型号通过缓存变量指定：
+#   CH591R / CH591D / CH591F  → 192K Flash，裁剪
+#   CH592D / CH592F / CH592A / CH592X → 448K Flash，全功能
+set(CHIP_SUB "CH592F" CACHE STRING "CH59x 子型号（CH591R/D/F 或 CH592D/F/A/X）")
+if(CHIP_SUB MATCHES "^CH591")
+    set(CHIP_IS_CH591 TRUE)
+    set(CHIP_SDK_RESOLVED "${CHIP_SUB}")
+else()
+    set(CHIP_IS_CH591 FALSE)
+    set(CHIP_SDK_RESOLVED "${CHIP_SUB}")
 endif()
+message(STATUS "gateway 子型号：${CHIP_SUB}（CH591 系列=${CHIP_IS_CH591}）")
 
-ch572_add_executable(gateway
-    gateway.c
-    pinmux.c
-    config.c
-    settings.c
-    crc.c
-    frame.c
-    frame_wire.c
-    framelink.c
-    framehdl.c
-    netroute.c
-    periph.c
-    spi_bus.c
-    httpd.c
-    swio.c
-    bleapp.c
-    blemgr.c
-    dhcps.c
-    util.c
-    USB
+hal_add_executable(gateway
+    SOURCES
+        gateway.c
+        pinmux.c
+        config.c
+        settings.c
+        crc.c
+        frame.c
+        frame_wire.c
+        framelink.c
+        framehdl.c
+        netroute.c
+        periph.c
+        spi_bus.c
+        httpd.c
+        swio.c
+        bleapp.c
+        blemgr.c
+        dhcps.c
+        util.c
     LWIP
-    LWIP_NOSYS
-    LWIP_NO_ETHIF
     BLE
+    USB
+    UART
 )
 
 # ---- Web UI：HTML → C 头文件（构建时生成）----------------------------------
@@ -201,15 +210,17 @@ endif()
 #   20 = CH592F/A QFN28（PA4/5/8-15 + PB4/7/10-15/22-23）
 #   24 = CH592X QFN32（PA4-15 + PB0/4/6/7/10-15/22-23）
 # 减小该值可省 RAM（g_cfg.pins[] 数组）与 Flash。
+# 注意：芯片相关值必须用 CACHE ... FORCE 覆盖，否则用户在缓存里留下的旧值
+#       （如切换芯片前设的 24）会覆盖这里的 set()，导致 g_pin_map[] 越界。
 set(GW_PIN_COUNT 24 CACHE STRING "引脚数量")
 if(CHIP_SDK_RESOLVED STREQUAL "CH591R" OR CHIP_SDK_RESOLVED STREQUAL "CH591D")
-    set(GW_PIN_COUNT 10)
+    set(GW_PIN_COUNT 10 CACHE STRING "引脚数量" FORCE)
 elseif(CHIP_SDK_RESOLVED STREQUAL "CH592D")
-    set(GW_PIN_COUNT 12)
+    set(GW_PIN_COUNT 12 CACHE STRING "引脚数量" FORCE)
 elseif(CHIP_SDK_RESOLVED STREQUAL "CH592F" OR CHIP_SDK_RESOLVED STREQUAL "CH592A")
-    set(GW_PIN_COUNT 20)
+    set(GW_PIN_COUNT 20 CACHE STRING "引脚数量" FORCE)
 elseif(CHIP_IS_CH591)
-    set(GW_PIN_COUNT 20)
+    set(GW_PIN_COUNT 20 CACHE STRING "引脚数量" FORCE)
 endif()
 target_compile_definitions(gateway PRIVATE GW_PIN_COUNT=${GW_PIN_COUNT})
 message(STATUS "gateway 引脚数量：${GW_PIN_COUNT}")

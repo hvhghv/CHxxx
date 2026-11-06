@@ -20,7 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - id: gen
         run: |
-          echo "include=$(bash scripts/gen_matrix.sh)" >> "$GITHUB_OUTPUT"
+          python3 scripts/gen_matrix.py > /tmp/matrix.json
+          echo "include=$(cat /tmp/matrix.json)" >> "$GITHUB_OUTPUT"
 
   # ---- 矩阵构建 ----
   build:
@@ -29,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.include) }}
-    name: ${{ matrix.project }} / ${{ matrix.chip }}
+    name: ${{ matrix.chip }} / ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +38,7 @@ jobs:
         id: tc-cache
         uses: actions/cache@v4
         with:
-          path: sdk/common/prebuilt/xpack-riscv-none-elf-gcc-15.2.0-1
+          path: sdk/prebuilt/xpack-riscv-none-elf-gcc-15.2.0-1
           key: xpack-riscv-none-elf-gcc-15.2.0-1-linux-x64
 
       - name: Download RISC-V toolchain
@@ -46,9 +47,9 @@ jobs:
           VERSION=15.2.0-1
           PKG=xpack-riscv-none-elf-gcc-$VERSION
           URL=https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v$VERSION
-          mkdir -p sdk/common/prebuilt
+          mkdir -p sdk/prebuilt
           curl -L --fail -o /tmp/$PKG.tar.gz $URL/$PKG-linux-x64.tar.gz
-          tar xzf /tmp/$PKG.tar.gz -C sdk/common/prebuilt
+          tar xzf /tmp/$PKG.tar.gz -C sdk/prebuilt
           rm /tmp/$PKG.tar.gz
 
       - name: Install build deps
@@ -56,19 +57,20 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake -B build -G Ninja \
+          cmake -B build_hal -G Ninja \
             -DCMAKE_MAKE_PROGRAM=ninja \
-            -DCMAKE_TOOLCHAIN_FILE=sdk/common/cmake/riscv.cmake \
-            -DCHIP_SDK=${{ matrix.chip }}
+            -DCMAKE_TOOLCHAIN_FILE=sdk/cmake/toolchain-riscv.cmake \
+            -DHAL_BUILD=ON \
+            -DCHIP=${{ matrix.chip }}
 
       - name: Build
-        run: cmake --build build --target ${{ matrix.target }}
+        run: cmake --build build_hal --target ${{ matrix.target }}
 
       - name: Collect artifacts
         run: |
           mkdir -p out
           for ext in bin hex elf; do
-            f=build/main/${{ matrix.target }}/${{ matrix.target }}.$ext
+            f=build_hal/main/${{ matrix.target }}/${{ matrix.target }}.$ext
             [ -f "$f" ] && cp "$f" out/${{ matrix.target }}-${{ matrix.chip }}.$ext
           done
           ls -la out/
